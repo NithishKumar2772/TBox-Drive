@@ -12,7 +12,8 @@ All notable changes to TBox Drive are recorded here. Unreleased work is not a pu
 - Wails v2 + React Windows desktop foundation.
 - Windows WinFsp virtual-drive prototype with whole-file cache hydration and upload-on-close.
 - Loopback-only self-hosted Web server and React browser client for account connection, paginated browsing, quota, upload/download, rename/move/delete and transfer history.
-- Browser upload request progress, provider-side transfer progress display and active upload cancellation.
+- Browser upload request progress, provider-side upload/download transfer progress, active upload cancellation and native-browser download cancellation tracking.
+- Cloud copy actions in both desktop and browser file explorers, with root/descendant path protections.
 - Desktop file move, cancellable upload/download contexts, persisted download transfer records, byte progress, size verification and atomic temporary-file commit.
 - Virtual-drive cache hydration serialization and fail-closed handling for cache files whose size differs from remote metadata, preserving possible unsynced local edits.
 - Private browser launch-token exchange, HttpOnly session cookie, same-origin mutation checks, CSP/no-store response headers and cross-process SQLite credential leases.
