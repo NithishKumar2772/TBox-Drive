@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -215,5 +216,24 @@ func TestMoveAndCopyEndpointsRejectDescendantDestinations(t *testing.T) {
 				t.Fatalf("unexpected validation response: %s", response.Body.String())
 			}
 		})
+	}
+}
+
+func TestDownloadResponseWriterPersistsStreamingProgress(t *testing.T) {
+	server := testServer(t)
+	ctx := context.Background()
+	task := transfer.Task{ID: "web-download-progress", ProviderID: "terabox", Direction: "download", Source: "42", Destination: "file.bin", Size: 5, Status: transfer.StatusQueued}
+	if err := server.store.CreateTransfer(ctx, task); err != nil { t.Fatal(err) }
+	if err := server.store.UpdateProgress(ctx, task.ID, 0, transfer.StatusRunning, ""); err != nil { t.Fatal(err) }
+
+	var output bytes.Buffer
+	writer := &downloadResponseWriter{writer: &output, store: server.store, transferID: task.ID, total: 5}
+	if _, err := writer.Write([]byte("hello")); err != nil { t.Fatal(err) }
+	writer.report()
+	if output.String() != "hello" { t.Fatalf("response body = %q, want hello", output.String()) }
+	got, err := server.store.GetTransfer(ctx, task.ID)
+	if err != nil { t.Fatal(err) }
+	if got.Transferred != 5 || got.Status != transfer.StatusRunning {
+		t.Fatalf("transfer progress = %d/%d status %s, want 5/5 running", got.Transferred, got.Size, got.Status)
 	}
 }
