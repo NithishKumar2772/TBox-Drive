@@ -29,7 +29,7 @@ declare global {
       SelectUploadFiles: () => Promise<string[]>;
       UploadFile: (accountID: string, localPath: string, parentPath: string, name: string, taskID: string) => Promise<UploadResult>;
       CancelTransfer: (taskID: string) => Promise<void>;
-      DownloadFile: (accountID: string, fileID: string, fileName: string) => Promise<string>;
+      DownloadFile: (accountID: string, fileID: string, fileName: string, size: number, taskID: string) => Promise<string>;
       ListTransfers: (limit: number) => Promise<Transfer[]>;
       GetVirtualDriveStatus: () => Promise<DriveStatus>;
       MountVirtualDrive: (accountID: string, mountpoint: string) => Promise<DriveStatus>;
@@ -317,13 +317,16 @@ export default function App() {
 
   const download = async (file: CloudFile) => {
     const api = desktop();
-    if (!api || !accountID) return;
+    if (!api || !accountID || busy) return;
+    const taskID = `tbox-${crypto.randomUUID()}`;
+    setActiveTransferId(taskID);
+    setProgress(null);
     setBusy(true);
     try {
-      const saved = await api.DownloadFile(accountID, file.id, file.name);
+      const saved = await api.DownloadFile(accountID, file.id, file.name, file.size, taskID);
       if (saved) setMessage(`Downloaded to ${saved}`);
     } catch (e) { setMessage(String(e)); }
-    finally { setBusy(false); }
+    finally { setActiveTransferId(""); setBusy(false); await refreshTransfers(); }
   };
 
   const disconnect = async () => {
@@ -407,7 +410,7 @@ export default function App() {
 
         {status && !status.ready && <div className="notice"><strong>Setup required</strong><span>{status.message}</span></div>}
         {message && <div className="message" role="status">{message}</div>}
-        {activeTransferId && <div className="notice"><strong>Upload running</strong><span>Cancel the active upload without affecting completed transfers.</span><button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current upload</button></div>}
+        {activeTransferId && <div className="notice"><strong>Transfer running</strong><span>Cancel the active upload or download without affecting completed transfers.</span><button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current transfer</button></div>}
         {device && <div className="connect-panel">
           <div><p className="eyebrow">TERABOX AUTHORIZATION</p><h2>Scan to connect your account</h2><p>Approve this device using your TeraBox account. This window will finish connecting automatically.</p>
             {device.user_code && <p className="user-code">Code: {device.user_code}</p>}
