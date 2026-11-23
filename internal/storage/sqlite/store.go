@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
@@ -60,7 +61,7 @@ func (s *Store) AcquireCredentialLock(ctx context.Context, key string, lease tim
 		timer := time.NewTimer(100 * time.Millisecond)
 		select {
 		case <-ctx.Done():
-			if !timer.Stop() { <-timer.C }
+			if !timer.Stop() { select { case <-timer.C: default: } }
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
