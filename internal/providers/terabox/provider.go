@@ -17,7 +17,7 @@ func New() *Adapter { return &Adapter{} }
 func NewConnected(api *APIClient) *Adapter { return &Adapter{api:api} }
 func (*Adapter) ID() string { return "terabox" }
 func (*Adapter) Name() string { return "TeraBox" }
-func (*Adapter) Capabilities() provider.Capabilities { return provider.Capabilities{MultipartUpload:true,ResumableUpload:true} }
+func (*Adapter) Capabilities() provider.Capabilities { return provider.Capabilities{MultipartUpload:true,ResumableUpload:true,StreamingDownload:true} }
 func (a *Adapter) List(ctx context.Context,parentPath,pageToken string)([]provider.File,string,error){
 	if a.api==nil{return nil,"",ErrNotImplemented}
 	if strings.TrimSpace(parentPath)==""{parentPath=a.api.applicationRoot+"/"}
@@ -29,8 +29,7 @@ func (a *Adapter) Upload(ctx context.Context,req provider.UploadRequest)(provide
 	name:=req.Name;if name==""{name=path.Base(strings.ReplaceAll(req.LocalPath,"\\","/"))}
 	if name=="."||name=="/"||name==".."||strings.ContainsAny(name,"/\\"){return provider.UploadResult{},errors.New("upload name must be a single safe filename")}
 	parent:=req.ParentID;if parent==""{parent=a.api.applicationRoot}
-	remote:=path.Join(parent,name)
-	return a.api.UploadFile(ctx,req.LocalPath,remote,UploadOptions{})
+	return a.api.UploadFile(ctx,req.LocalPath,path.Join(parent,name),UploadOptions{})
 }
-func (*Adapter) Download(context.Context,string)(io.ReadCloser,error){return nil,ErrNotImplemented}
+func (a *Adapter) Download(ctx context.Context,fileID string)(io.ReadCloser,error){if a.api==nil{return nil,ErrNotImplemented};return a.api.Download(ctx,fileID)}
 func (*Adapter) Delete(context.Context,string)error{return ErrNotImplemented}
