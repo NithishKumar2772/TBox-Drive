@@ -49,6 +49,19 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - Archive import for ZIP, TAR and TAR.GZ with optional extraction.
 - Do not claim provider-specific size limits until confirmed against official documentation and a real authorized account.
 
+## Professional application enhancements
+- Transfer queue controls: pause, resume, retry, cancel, retry failed items and bounded parallel transfers.
+- Optional bandwidth limits for uploads and downloads, with separate upload/download caps and a clear unlimited mode.
+- Transfer notifications for completion, failure, authentication expiry and low-storage conditions.
+- Per-file and per-transfer details: source/destination, size, checksum status, elapsed time, average/current speed and ETA.
+- Safe conflict handling: ask before overwrite, keep both, rename incoming copy or skip; never silently discard local changes.
+- Automatic retry with backoff and resume after app restart or network interruption.
+- Configurable cache location/size, cache usage meter, pinned-file protection and secure temporary-file cleanup.
+- App lock on idle, optional Windows Hello/device unlock, and a clear lock-now action. Device unlock must protect access to local secrets; it must not replace file-password/recovery-key security.
+- Version history/restore where the TeraBox API exposes enough verified metadata; never promise cloud versioning without provider support.
+- Diagnostics page with redacted logs, connection test and exportable support bundle. Never include passwords, access tokens, recovery keys or decrypted file content.
+- Accessibility, keyboard navigation, drag/drop, sortable columns, context menus and high-DPI/responsive layouts.
+
 ## Security
 - Ask before each upload whether to encrypt.
 - Encrypted content must be encrypted before leaving the device and decrypted locally for supported previews/streaming.
