@@ -196,3 +196,24 @@ func TestCopyEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
 		t.Fatalf("unexpected validation response: %s", response.Body.String())
 	}
 }
+
+func TestMoveAndCopyEndpointsRejectDescendantDestinations(t *testing.T) {
+	for _, endpoint := range []string{"/api/files/move", "/api/files/copy"} {
+		t.Run(endpoint, func(t *testing.T) {
+			server := testServer(t)
+			body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/folder","destination":"/Apps/TBox-Drive/folder/child"}`
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765"+endpoint, strings.NewReader(body))
+			req.Host = "127.0.0.1:8765"
+			req.Header.Set("Origin", "http://127.0.0.1:8765")
+			req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, req)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), "descendants") {
+				t.Fatalf("unexpected validation response: %s", response.Body.String())
+			}
+		})
+	}
+}
