@@ -1,6 +1,6 @@
 module github.com/NithishKumar2772/TBox-Drive
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/wailsapp/wails/v2 v2.15.0

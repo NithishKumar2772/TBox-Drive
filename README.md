@@ -25,7 +25,7 @@ See [docs/PRODUCT_SPECIFICATION.md](docs/PRODUCT_SPECIFICATION.md) for the confi
 - MIT license
 
 ## Development
-Requirements: Go 1.25+, Node.js 20+.
+Requirements: Go 1.26.11+, Node.js 24+.
 
 ```sh
 go test ./...
