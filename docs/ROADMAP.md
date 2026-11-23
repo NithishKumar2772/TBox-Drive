@@ -23,7 +23,8 @@
 - [x] Configurable automatic folder refresh
 - [x] GitHub latest-release checker and automatic startup check preference
 - [x] Upload throughput and estimated-time-remaining display
-- [ ] Add and verify automatic >4 GiB multipart upload acceptance test using an approved TeraBox account; confirm final object is one file\n- [ ] Real TeraBox account verification with an approved Open Platform app
+- [ ] Add and verify automatic >4 GiB multipart upload acceptance test using an approved TeraBox account; confirm final object is one file
+- [ ] Real TeraBox account verification with an approved Open Platform app
 - [ ] Empty-file upload and bounded parallel uploads
 
 ## M2 File management and desktop explorer
