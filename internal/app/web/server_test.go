@@ -37,6 +37,7 @@ func TestLoopbackStatusIsAvailable(t *testing.T){
 	server:=testServer(t)
 	req:=httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/status",nil)
 	req.Host="127.0.0.1:8765"
+	req.AddCookie(&http.Cookie{Name:"tbox_local_session",Value:server.sessionToken})
 	response:=httptest.NewRecorder()
 	server.Handler().ServeHTTP(response,req)
 	if response.Code!=http.StatusOK{t.Fatalf("status = %d, body=%s",response.Code,response.Body.String())}
@@ -93,6 +94,7 @@ func TestAccountsEndpointDoesNotExposeCredentialReference(t *testing.T) {
 	if err := server.store.Save(context.Background(),item); err != nil { t.Fatal(err) }
 	req := httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/accounts",nil)
 	req.Host = "127.0.0.1:8765"
+	req.AddCookie(&http.Cookie{Name:"tbox_local_session",Value:server.sessionToken})
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response,req)
 	if response.Code != http.StatusOK { t.Fatalf("status = %d, body=%s",response.Code,response.Body.String()) }
@@ -101,4 +103,28 @@ func TestAccountsEndpointDoesNotExposeCredentialReference(t *testing.T) {
 		t.Fatalf("account response exposed credential metadata: %s",body)
 	}
 	if !strings.Contains(body,"Personal account") { t.Fatalf("account metadata missing: %s",body) }
+}
+
+func TestAPIRequiresLocalBrowserSession(t *testing.T) {
+	server := testServer(t)
+	req := httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/status",nil)
+	req.Host = "127.0.0.1:8765"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusUnauthorized { t.Fatalf("status = %d, want 401",response.Code) }
+}
+
+func TestLaunchTokenExchangesForHttpOnlySessionCookie(t *testing.T) {
+	server := testServer(t)
+	req := httptest.NewRequest(http.MethodPost,"http://127.0.0.1:8765/api/session",nil)
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin","http://127.0.0.1:8765")
+	req.Header.Set("X-TBox-Session",server.sessionToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusNoContent { t.Fatalf("status = %d, body=%s",response.Code,response.Body.String()) }
+	cookie := response.Result().Cookies()
+	if len(cookie)!=1 || cookie[0].Name!="tbox_local_session" || !cookie[0].HttpOnly || cookie[0].SameSite!=http.SameSiteStrictMode {
+		t.Fatalf("unexpected session cookie: %#v",cookie)
+	}
 }
