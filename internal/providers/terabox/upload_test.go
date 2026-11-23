@@ -27,7 +27,7 @@ func TestPlanTeraBoxChunks(t *testing.T){
 }
 func TestPlanTeraBoxChunksAvoidsSmallTail(t *testing.T){chunks,err:=PlanTeraBoxChunks((8<<20)+1,8<<20);if err!=nil{t.Fatal(err)};if len(chunks)!=1||chunks[0].Size!=(8<<20)+1{t.Fatalf("unexpected chunks: %#v",chunks)}}
 func TestPlanTeraBoxChunksAboveFourGiBStaysOneLogicalFile(t *testing.T) {
-	const size := int64(4<<30) + (37 << 20) + 123
+	const size = int64(4<<30) + (37 << 20) + 123
 	chunks, err := PlanTeraBoxChunks(size, DefaultUploadChunkSize)
 	if err != nil { t.Fatal(err) }
 	if len(chunks) < 2 { t.Fatalf("expected automatic multipart upload for >4 GiB, got %d part(s)", len(chunks)) }
