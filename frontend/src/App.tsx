@@ -8,6 +8,7 @@ type FilePage = { files: CloudFile[]; nextPageToken?: string };
 type Quota = { total: number; used: number };
 type Transfer = { id: string; provider_id: string; direction: string; source: string; destination: string; size: number; transferred: number; status: string; error?: string };
 type UploadResult = { taskID: string; file: CloudFile };
+type DriveStatus = { mounted: boolean; mountpoint?: string; provider?: string; mode?: string; message: string };
 
 declare global {
   interface Window {
@@ -27,6 +28,9 @@ declare global {
       UploadFile: (accountID: string, localPath: string, parentPath: string, name: string, taskID: string) => Promise<UploadResult>;
       DownloadFile: (accountID: string, fileID: string, fileName: string) => Promise<string>;
       ListTransfers: (limit: number) => Promise<Transfer[]>;
+      GetVirtualDriveStatus: () => Promise<DriveStatus>;
+      MountVirtualDrive: (accountID: string, mountpoint: string) => Promise<DriveStatus>;
+      UnmountVirtualDrive: () => Promise<DriveStatus>;
     } } };
     runtime?: { EventsOn: (event: string, callback: (payload: { transferId: string; transferred: number; total: number }) => void) => (() => void) };
   }
@@ -52,7 +56,9 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ transferred: number; total: number } | null>(null);
-  const [activeView, setActiveView] = useState<"files" | "transfers">("files");
+  const [activeView, setActiveView] = useState<"files" | "transfers" | "drive">("files");
+  const [driveStatus, setDriveStatus] = useState<DriveStatus>({ mounted: false, message: "Virtual drive is not mounted." });
+  const [driveLetter, setDriveLetter] = useState("T:");
   const [searchTerm, setSearchTerm] = useState("");
   const [nextPageToken, setNextPageToken] = useState("");
   const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
@@ -104,6 +110,7 @@ export default function App() {
     const api = desktop();
     if (!api) { setStatus({ ready: false, message: "Run the TBox Drive desktop build to connect cloud accounts." }); return; }
     api.GetAppStatus().then(setStatus).catch(e => setMessage(String(e)));
+    api.GetVirtualDriveStatus().then(setDriveStatus).catch(e => setMessage(String(e)));
     api.ListAccounts().then(list => {
       setAccounts(list);
       if (list.length) setAccountID(list[0].id);
@@ -125,6 +132,26 @@ export default function App() {
     return () => media.removeEventListener("change", applyTheme);
   }, [theme]);
   useEffect(() => { if (activeView === "transfers") refreshTransfers(); }, [activeView, refreshTransfers]);
+
+  const mountDrive = async () => {
+    const api = desktop();
+    if (!api || !accountID) return;
+    setBusy(true);
+    try {
+      const result = await api.MountVirtualDrive(accountID, driveLetter.trim().toUpperCase());
+      setDriveStatus(result); setMessage(result.message);
+    } catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const unmountDrive = async () => {
+    const api = desktop();
+    if (!api) return;
+    setBusy(true);
+    try { const result = await api.UnmountVirtualDrive(); setDriveStatus(result); setMessage(result.message); }
+    catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
 
   const connect = async () => {
     const api = desktop();
@@ -228,6 +255,7 @@ export default function App() {
         <nav>
           <button className={activeView === "files" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("files")}>My Files</button>
           <button className={activeView === "transfers" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("transfers")}>Transfers</button>
+          <button className={activeView === "drive" ? "nav-item active" : "nav-item"} onClick={() => { setActiveView("drive"); desktop()?.GetVirtualDriveStatus().then(setDriveStatus).catch(e => setMessage(String(e))); }}>Virtual Drive</button>
         </nav>
         <div className="provider">
           <span className="dot" /> TeraBox
@@ -240,7 +268,7 @@ export default function App() {
 
       <section className="content">
         <header>
-          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{activeView === "files" ? "My Files" : "Transfers"}</h1></div>
+          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{activeView === "files" ? "My Files" : activeView === "transfers" ? "Transfers" : "Virtual Drive"}</h1></div>
           <div className="header-actions">
             {accountID && activeView === "files" && <button onClick={upload} disabled={busy}>Upload file</button>}
             <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
@@ -294,6 +322,28 @@ export default function App() {
               </div>}
           </article>
         </>}
+
+        {activeView === "drive" && <article className="panel drive-panel">
+          <div className="panel-head">
+            <div><p className="eyebrow">WINDOWS FILE EXPLORER INTEGRATION</p><h2>TeraBox Virtual Drive</h2></div>
+            <span className={driveStatus.mounted ? "drive-pill mounted" : "drive-pill"}>{driveStatus.mounted ? "Mounted" : "Not mounted"}</span>
+          </div>
+          <p className="drive-description">Mount your connected TeraBox application folder as a Windows drive letter. Open files from File Explorer; the prototype downloads them to a local cache on demand and uploads edited files when they are closed.</p>
+          <div className="drive-status-grid">
+            <div><small>Drive letter</small><strong>{driveStatus.mountpoint || driveLetter}</strong></div>
+            <div><small>Provider</small><strong>{driveStatus.provider || "TeraBox"}</strong></div>
+            <div><small>Mode</small><strong>{driveStatus.mode || "Hybrid prototype"}</strong></div>
+          </div>
+          <div className="drive-controls">
+            <label htmlFor="drive-letter">Mount as</label>
+            <input id="drive-letter" className="search-input drive-letter" value={driveLetter} maxLength={2} onChange={event => setDriveLetter(event.target.value.toUpperCase())} disabled={driveStatus.mounted} />
+            {!driveStatus.mounted
+              ? <button onClick={mountDrive} disabled={busy || !accountID}>Mount drive</button>
+              : <button className="secondary danger" onClick={unmountDrive} disabled={busy}>Unmount drive</button>}
+          </div>
+          <div className="notice drive-notice"><strong>Requirement</strong><span>Install WinFsp on Windows before mounting. A real TeraBox Open Platform account and application configuration are also required.</span></div>
+          <p className="drive-message">{driveStatus.message}</p>
+        </article>}
 
         {activeView === "transfers" && <article className="panel">
           <div className="panel-head"><div><p className="eyebrow">TRANSFER CENTER</p><h2>Recent activity</h2></div><button className="secondary" onClick={refreshTransfers}>Refresh</button></div>
