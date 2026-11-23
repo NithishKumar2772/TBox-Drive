@@ -88,7 +88,7 @@ See [the detailed roadmap](docs/ROADMAP.md) for milestone-level progress and acc
 - Authorized-device listing, session revocation and cross-device coordination.
 - Native Android, iOS and TV clients.
 
-Planned items are not claims of current functionality. Their implementation and verification are tracked in the roadmap.
+**Platform delivery order:** Windows desktop + self-hosted Web → macOS → TV (Android TV / Google TV / Fire TV, Samsung Tizen, LG webOS) → Android and iOS mobile.\n\nPlanned items are not claims of current functionality. Their implementation and verification are tracked in the roadmap.
 
 ## Architecture
 
