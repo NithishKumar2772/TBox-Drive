@@ -36,7 +36,7 @@ To use another local port, set `TBOX_WEB_ADDR` to a loopback address such as `12
 - Upload one or more selected files sequentially, with browser-to-local-service byte progress and a cancel action for the active request.
 - View persisted TeraBox transfer byte progress while the server finalizes each upload.
 - Download files through the browser.
-- Rename, move and delete cloud items.
+- Rename, move, copy and delete cloud items.
 - View persisted transfer records and their progress/error state.
 - Disconnect a TeraBox account.
 
