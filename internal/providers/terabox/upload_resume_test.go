@@ -67,7 +67,7 @@ func TestUploadFileResumesAfterInterruptedPart(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	defer store.Close()
 
-	options := UploadOptions{ChunkSize:8<<20, Repository:store, TransferID:"resume-task"}
+	options := UploadOptions{ChunkSize:8<<20, Repository:store, TransferID:"resume-task", MaxPartAttempts:1}
 	remote := "/From: Other Applications/TBox-Drive-123/resume.bin"
 	if _, err := api.UploadFile(context.Background(), local, remote, options); err == nil {
 		t.Fatal("expected first attempt to stop on interrupted part")
