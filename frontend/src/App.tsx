@@ -17,6 +17,9 @@ declare global {
       CompleteTeraBoxConnect: (device: DeviceAuthorization) => Promise<Account>;
       ListAccounts: () => Promise<Account[]>;
       DisconnectAccount: (id: string) => Promise<void>;
+      RenameFile: (accountID: string, remotePath: string, newName: string) => Promise<void>;
+      DeleteFile: (accountID: string, remotePath: string) => Promise<void>;
+      MoveFile: (accountID: string, remotePath: string, destinationDir: string, newName: string) => Promise<void>;
       ListFiles: (accountID: string, parentPath: string, pageToken: string) => Promise<FilePage>;
       GetStorageQuota: (accountID: string) => Promise<Quota>;
       SelectUploadFile: () => Promise<string>;
@@ -123,6 +126,26 @@ export default function App() {
     finally { setBusy(false); }
   };
 
+  const rename = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID) return;
+    const nextName = window.prompt("Rename item", file.name);
+    if (!nextName || nextName.trim() === file.name) return;
+    setBusy(true);
+    try { await api.RenameFile(accountID, file.path, nextName.trim()); setMessage(`Renamed to ${nextName.trim()}`); await refreshFiles(); }
+    catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID || !window.confirm(`Delete "${file.name}" from TeraBox?`)) return;
+    setBusy(true);
+    try { await api.DeleteFile(accountID, file.path); setMessage(`Deleted ${file.name}`); await refreshFiles(); }
+    catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
+
   const download = async (file: CloudFile) => {
     const api = desktop();
     if (!api || !accountID) return;
@@ -216,7 +239,11 @@ export default function App() {
                   </button>
                   <span>{file.isDirectory ? "—" : formatBytes(file.size)}</span>
                   <span>{file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : "—"}</span>
-                  <span>{!file.isDirectory && <button className="text-button" onClick={() => download(file)} disabled={busy}>Download</button>}</span>
+                  <span className="row-actions">
+                    {!file.isDirectory && <button className="text-button" onClick={() => download(file)} disabled={busy}>Download</button>}
+                    <button className="text-button" onClick={() => rename(file)} disabled={busy}>Rename</button>
+                    <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
+                  </span>
                 </div>)}
                 {!files.length && <div className="empty compact"><h3>{busy ? "Loading files…" : "This folder is empty"}</h3><p>Files from your TeraBox application folder will appear here.</p></div>}
               </div>}
