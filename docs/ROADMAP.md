@@ -87,12 +87,16 @@
 - [ ] Shared 24-locale language framework and system-language detection
 
 ## Platform delivery order
-1. Windows desktop + self-hosted Web (current priority)
+1. Windows desktop + self-hosted Web (current foundation; finish production-quality transfers, drive/cache behaviour and release verification)
 2. macOS desktop and Finder integration
 3. TV clients: Android TV / Google TV / Fire TV, Samsung Tizen and LG webOS
 4. Mobile clients: Android and iOS
 
+A platform is not complete until it has a native implementation, reproducible CI build, distributable package, platform-specific automated tests, manual device acceptance, upgrade/uninstall validation and published installation documentation.
+
 ## M6 Release engineering
+- [x] Windows x64 desktop + self-hosted Web build script and CI artifact pipeline (preview packaging; no public release created yet)
+- [ ] Windows x64 signed installer/portable release, tested upgrade and rollback
 - [ ] Windows x64/ARM64 packaging
 - [ ] macOS Intel/Apple Silicon packaging and signing
 - [ ] Linux AppImage/DEB/RPM/Arch packaging
