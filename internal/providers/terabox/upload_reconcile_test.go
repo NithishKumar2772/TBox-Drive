@@ -66,7 +66,7 @@ func TestUploadFileReconcilesAmbiguousShardFailure(t *testing.T) {
 	data := make([]byte, 10<<20)
 	for i := range data { data[i] = byte(i % 251) }
 	if err := os.WriteFile(local, data, 0600); err != nil { t.Fatal(err) }
-	api, err := NewAPIClient(APIConfig{AccessToken:"test", TokenInfo:TokenInfo{APIDomain:server.URL, UploadDomain:server.URL}, ApplicationRoot:"/From: Other Applications/TBox-Drive-123"})
+	api, err := newTestAPI(&httptest.Server{URL: server.URL, Client: server.Client()})
 	if err != nil { t.Fatal(err) }
 	store, err := sqlite.Open(":memory:")
 	if err != nil { t.Fatal(err) }
