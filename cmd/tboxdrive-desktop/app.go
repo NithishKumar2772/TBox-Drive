@@ -182,6 +182,11 @@ func(d *DesktopApp)CancelTransfer(taskID string)error{
 }
 func(d *DesktopApp)RenameFile(accountID,remotePath,newName string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.Rename(d.ctx,remotePath,newName)}
 func(d *DesktopApp)DeleteFile(accountID,remotePath string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.DeletePath(d.ctx,remotePath)}
+func(d *DesktopApp)CopyFile(accountID,remotePath,destinationDir,newName string)error{
+	if err:=d.requireService();err!=nil{return err}
+	api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err}
+	return api.Copy(d.ctx,remotePath,destinationDir,newName)
+}
 func(d *DesktopApp)MoveFile(accountID,remotePath,destinationDir,newName string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.Move(d.ctx,remotePath,destinationDir,newName)}
 func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,taskID string)(saved string,retErr error){
 	if err:=d.requireService();err!=nil{return "",err}
