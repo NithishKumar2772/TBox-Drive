@@ -14,6 +14,9 @@ import (
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 )
 
+type CredentialLocker interface {
+	AcquireCredentialLock(context.Context, string, time.Duration) (func() error, error)
+}
 type SecretStore interface {
 	Get(context.Context,string)([]byte,error)
 	Set(context.Context,string,[]byte) error
@@ -33,11 +36,13 @@ type TeraBoxService struct {
 	applicationRoot string
 	now func()time.Time
 	refreshMu sync.Mutex
+	credentialLocker CredentialLocker
 }
 func NewTeraBoxService(oauth *terabox.OAuthClient,secrets SecretStore,accounts account.Repository,transfers transfer.Repository,applicationRoot string)(*TeraBoxService,error){
 	if oauth==nil||secrets==nil||accounts==nil{return nil,errors.New("OAuth client, secret store and account repository are required")}
 	if applicationRoot==""{return nil,errors.New("TeraBox application folder path is required")}
-	return &TeraBoxService{oauth:oauth,secrets:secrets,accounts:accounts,transfers:transfers,applicationRoot:applicationRoot,now:time.Now},nil
+	locker, _ := accounts.(CredentialLocker)
+	return &TeraBoxService{oauth:oauth,secrets:secrets,accounts:accounts,transfers:transfers,applicationRoot:applicationRoot,now:time.Now,credentialLocker:locker},nil
 }
 func(s *TeraBoxService)BeginConnect(ctx context.Context)(terabox.DeviceAuthorization,error){return s.oauth.BeginDeviceAuthorization(ctx)}
 func(s *TeraBoxService)CompleteConnect(ctx context.Context,device terabox.DeviceAuthorization)(account.Account,error){
@@ -57,6 +62,7 @@ func(s *TeraBoxService)NewAPIClient(ctx context.Context,accountID string)(*terab
 	// TeraBox refresh tokens are single-use. Serialize refresh and credential
 	// persistence so concurrent API calls cannot consume the same token twice.
 	s.refreshMu.Lock();defer s.refreshMu.Unlock()
+	release,lockErr:=s.acquireCredentialLock(ctx,accountID);if lockErr!=nil{return nil,fmt.Errorf("lock TeraBox credentials: %w",lockErr)};defer func(){_ = release()}()
 	item,err:=s.accounts.Get(ctx,accountID);if err!=nil{return nil,err};if item.ProviderID!="terabox"{return nil,errors.New("account is not a TeraBox account")}
 	raw,err:=s.secrets.Get(ctx,item.CredentialRef);if err!=nil{return nil,fmt.Errorf("load TeraBox credentials: %w",err)}
 	var credential storedTeraBoxCredential;if err:=json.Unmarshal(raw,&credential);err!=nil{return nil,errors.New("stored TeraBox credential data is invalid")}
@@ -86,6 +92,7 @@ func(s *TeraBoxService)Disconnect(ctx context.Context,accountID string)error{
 	// credentials back after the account has been removed.
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
+	release,lockErr:=s.acquireCredentialLock(ctx,accountID);if lockErr!=nil{return fmt.Errorf("lock TeraBox credentials: %w",lockErr)};defer func(){_ = release()}()
 	item,err:=s.accounts.Get(ctx,accountID);if err!=nil{return err}
 	// Remove the account record first. A database failure must not destroy
 	// the only reference to credentials that are still stored in the vault.
@@ -97,4 +104,9 @@ func(s *TeraBoxService)Disconnect(ctx context.Context,accountID string)error{
 		return fmt.Errorf("delete TeraBox credentials: %w",err)
 	}
 	return nil
+}
+
+func (s *TeraBoxService) acquireCredentialLock(ctx context.Context, accountID string) (func() error, error) {
+	if s.credentialLocker == nil { return func() error { return nil }, nil }
+	return s.credentialLocker.AcquireCredentialLock(ctx, accountID, 5*time.Minute)
 }
