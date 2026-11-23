@@ -56,7 +56,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ transferred: number; total: number } | null>(null);
-  const [activeView, setActiveView] = useState<"files" | "transfers" | "drive">("files");
+  const [activeView, setActiveView] = useState<"home" | "files" | "pictures" | "documents" | "archives" | "videos" | "music" | "transfers" | "drive">("home");
   const [driveStatus, setDriveStatus] = useState<DriveStatus>({ mounted: false, message: "Virtual drive is not mounted." });
   const [driveLetter, setDriveLetter] = useState("T:");
   const [searchTerm, setSearchTerm] = useState("");
@@ -244,6 +244,20 @@ export default function App() {
     setCurrentPath(next);
   };
 
+  const categoryExtensions: Record<string, string[]> = {
+    pictures: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".tif", ".tiff"],
+    documents: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt", ".csv"],
+    archives: [".zip", ".rar", ".7z", ".tar", ".gz", ".tgz"],
+    videos: [".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"],
+    music: [".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".wma"],
+  };
+  const filteredFiles = files.filter(file => {
+    const matchesSearch = file.name.toLowerCase().includes(searchTerm.trim().toLowerCase());
+    const extensions = categoryExtensions[activeView];
+    const matchesCategory = !extensions || file.isDirectory || extensions.some(extension => file.name.toLowerCase().endsWith(extension));
+    return matchesSearch && matchesCategory;
+  });
+
   const qrSource = device?.qrcode_url?.startsWith("data:") || device?.qrcode_url?.startsWith("http")
     ? device.qrcode_url
     : device?.qrcode_url ? `data:image/png;base64,${device.qrcode_url}` : "";
@@ -253,7 +267,13 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">T</span><span>TBox Drive</span></div>
         <nav>
+          <button className={activeView === "home" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("home")}>Home</button>
           <button className={activeView === "files" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("files")}>My Files</button>
+          <button className={activeView === "pictures" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("pictures")}>Pictures</button>
+          <button className={activeView === "documents" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("documents")}>Documents</button>
+          <button className={activeView === "archives" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("archives")}>ZIP</button>
+          <button className={activeView === "videos" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("videos")}>Videos</button>
+          <button className={activeView === "music" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("music")}>Music</button>
           <button className={activeView === "transfers" ? "nav-item active" : "nav-item"} onClick={() => setActiveView("transfers")}>Transfers</button>
           <button className={activeView === "drive" ? "nav-item active" : "nav-item"} onClick={() => { setActiveView("drive"); desktop()?.GetVirtualDriveStatus().then(setDriveStatus).catch(e => setMessage(String(e))); }}>Virtual Drive</button>
         </nav>
@@ -268,7 +288,7 @@ export default function App() {
 
       <section className="content">
         <header>
-          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{activeView === "files" ? "My Files" : activeView === "transfers" ? "Transfers" : "Virtual Drive"}</h1></div>
+          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{({home:"Home",files:"My Files",pictures:"Pictures",documents:"Documents",archives:"ZIP",videos:"Videos",music:"Music",transfers:"Transfers",drive:"Virtual Drive"} as Record<string,string>)[activeView]}</h1></div>
           <div className="header-actions">
             {accountID && activeView === "files" && <button onClick={upload} disabled={busy}>Upload file</button>}
             <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
@@ -286,7 +306,7 @@ export default function App() {
           {qrSource && <img className="qr" src={qrSource} alt="TeraBox authorization QR code" />}
         </div>}
 
-        {activeView === "files" && <>
+        {!["transfers", "drive"].includes(activeView) && <>
           <div className="cards">
             <article><p>Connected accounts</p><strong>{accounts.length}</strong><small>TeraBox cloud accounts</small></article>
             <article><p>Cloud storage used</p><strong>{quota ? formatBytes(quota.used) : "—"}</strong><small>{quota ? `of ${formatBytes(quota.total)} total` : "Connect an account to view quota"}</small></article>
@@ -305,7 +325,7 @@ export default function App() {
             {!accountID ? <div className="empty"><div className="empty-icon">☁</div><h3>No cloud account connected</h3><p>Connect TeraBox to browse and transfer your files.</p></div> :
               <div className="file-list">
                 <div className="file-row file-heading"><span>Name</span><span>Size</span><span>Modified</span><span>Action</span></div>
-                {files.filter(file => file.name.toLowerCase().includes(searchTerm.trim().toLowerCase())).map(file => <div className="file-row" key={file.id}>
+                {filteredFiles.map(file => <div className="file-row" key={file.id}>
                   <button className="file-name" onClick={() => file.isDirectory && setCurrentPath(file.path)} disabled={!file.isDirectory}>
                     <span className="file-icon">{file.isDirectory ? "▰" : "▤"}</span>{file.name}
                   </button>
@@ -317,7 +337,7 @@ export default function App() {
                     <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
                   </span>
                 </div>)}
-                {!files.filter(file => file.name.toLowerCase().includes(searchTerm.trim().toLowerCase())).length && <div className="empty compact"><h3>{busy ? "Loading files…" : searchTerm ? "No matching files" : "This folder is empty"}</h3><p>{searchTerm ? "Try a different search term." : "Files from your TeraBox application folder will appear here."}</p></div>}
+                {!filteredFiles.length && <div className="empty compact"><h3>{busy ? "Loading files…" : searchTerm ? "No matching files" : "This folder is empty"}</h3><p>{searchTerm ? "Try a different search term." : "Files from your TeraBox application folder will appear here."}</p></div>}
                 {nextPageToken && <div className="load-more"><button className="secondary" onClick={loadMoreFiles} disabled={busy}>Load more files</button></div>}
               </div>}
           </article>
