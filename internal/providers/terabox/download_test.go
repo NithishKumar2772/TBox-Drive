@@ -23,14 +23,14 @@ func TestDownloadStreamsFromOfficialLink(t *testing.T){
 		}
 	}))
 	defer server.Close()
-	api,err:=NewAPIClient(APIConfig{AccessToken:"token",TokenInfo:TokenInfo{APIDomain:server.URL,UploadDomain:server.URL}})
+	api,err:=newTestAPI(server)
 	if err!=nil{t.Fatal(err)}
 	body,err:=api.Download(context.Background(),"42");if err!=nil{t.Fatal(err)};defer body.Close()
 	got,err:=io.ReadAll(body);if err!=nil{t.Fatal(err)}
 	if string(got)!="streamed file bytes"{t.Fatalf("got %q",got)}
 }
 func TestDownloadRejectsInvalidID(t *testing.T){
-	api,err:=NewAPIClient(APIConfig{AccessToken:"token",TokenInfo:TokenInfo{APIDomain:"https://www.terabox.com",UploadDomain:"https://c-jp.terabox.com"}});if err!=nil{t.Fatal(err)}
+	api,err:=NewAPIClient(APIConfig{AccessToken:"token",TokenInfo:TokenInfo{APIDomain:"https://www.terabox.com",UploadDomain:"https://c-jp.terabox.com"},ApplicationRoot:"/app"});if err!=nil{t.Fatal(err)}
 	if _,err:=api.DownloadURL(context.Background(),"../bad");err==nil{t.Fatal("expected invalid file ID")}
 }
 func TestDownloadRejectsUntrustedHost(t *testing.T){
@@ -39,6 +39,6 @@ func TestDownloadRejectsUntrustedHost(t *testing.T){
 		fmt.Fprint(w,`{"errno":0,"dlink":[{"fs_id":"7","dlink":"https://evil.example/file"}]}`)
 	}))
 	defer server.Close()
-	api,err:=NewAPIClient(APIConfig{AccessToken:"token",TokenInfo:TokenInfo{APIDomain:server.URL,UploadDomain:server.URL}});if err!=nil{t.Fatal(err)}
+	api,err:=newTestAPI(server);if err!=nil{t.Fatal(err)}
 	if _,err:=api.DownloadURL(context.Background(),"7");err==nil{t.Fatal("expected untrusted host rejection")}
 }
