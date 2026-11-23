@@ -170,7 +170,7 @@ func TestMoveEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
 }
 
 func TestValidateFileNameRejectsPathComponents(t *testing.T) {
-	for _, name := range []string{"", " ", ".", "..", "../secret", `folder\\file.txt`, "folder/file.txt"} {
+	for _, name := range []string{"", " ", ".", "..", "../secret", `folder\\file.txt`, "folder/file.txt", "bad\x00name", "bad\r\nname"} {
 		if err := validateFileName(name); err == nil {
 			t.Errorf("validateFileName(%q) accepted an unsafe name", name)
 		}
