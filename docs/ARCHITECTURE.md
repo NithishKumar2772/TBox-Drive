@@ -16,6 +16,7 @@ TBox Drive uses one shared Go application and transfer core with a TeraBox-first
 - Windows desktop: Wails hosts the React interface and calls bound Go application methods.
 - Self-hosted Web: a local Go HTTP server serves the React bundle and exposes a same-origin API on loopback only.
 - Both clients use the same account service, TeraBox API adapter, SQLite database and OS credential vault.
+- A SQLite lease lock coordinates single-use refresh-token rotation and account disconnect across the separate desktop and web processes. Leases expire after a process crash so another client can recover.
 - Browser JavaScript receives public account metadata only. Provider access and refresh tokens remain in the Go process and credential vault.
 - Remote/LAN access is intentionally disabled. A future remote mode requires a separate authenticated device-session architecture and security review.
 
