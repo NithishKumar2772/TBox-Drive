@@ -29,8 +29,9 @@ The official docs describe three stages: precreate with an ordered MD5 block lis
 
 - Empty-file upload is not supported.
 - Upload concurrency is sequential.
-- Folder creation/rename/delete and sharing are not implemented.
-- Wails desktop UI is not wired to the account service yet.
+- Rename, move, copy and delete methods are implemented against the documented Open Platform file-manager operation set; verify behaviour with an authorized live account before release.
+- The current Open Platform file-manager documentation lists copy, move, rename and delete, but does not document directory creation. Do not add an undocumented mkdir endpoint; folder creation and folder-tree upload remain blocked on an approved documented API.
+- The Wails desktop UI is connected for account connection, file listing, multi-file selection/upload, download and transfer history; native virtual-drive integration and synchronization are not implemented yet.
 - Real account integration tests require an approved TeraBox Open Platform application.
 
 Do not substitute reverse-engineered PCS/NDUS web endpoints and label them official. Never put user tokens in frontend code, SQLite plaintext, logs, examples or GitHub Actions output.
