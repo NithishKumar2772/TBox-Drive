@@ -271,6 +271,25 @@ export default function App() {
     finally { setBusy(false); }
   };
 
+  const move = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID) return;
+    const destination = window.prompt("Move to folder path inside your TBox Drive application folder", status?.applicationRoot || "");
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    const sourceParent = source.slice(0, source.lastIndexOf("/")) || status?.applicationRoot || "";
+    if (target === sourceParent) { setMessage("This item is already in that folder."); return; }
+    if (target === source || target.startsWith(source + "/")) { setMessage("A folder cannot be moved into itself or one of its descendants."); return; }
+    setBusy(true);
+    try {
+      await api.MoveFile(accountID, file.path, target, "");
+      setMessage(`Moved ${file.name}.`);
+      await refreshFiles();
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
   const remove = async (file: CloudFile) => {
     const api = desktop();
     if (!api || !accountID || !window.confirm(`Delete "${file.name}" from TeraBox?`)) return;
@@ -408,6 +427,7 @@ export default function App() {
                   <span className="row-actions">
                     {!file.isDirectory && <button className="text-button" onClick={() => download(file)} disabled={busy}>Download</button>}
                     <button className="text-button" onClick={() => rename(file)} disabled={busy}>Rename</button>
+                    <button className="text-button" onClick={() => move(file)} disabled={busy}>Move</button>
                     <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
                   </span>
                 </div>)}
