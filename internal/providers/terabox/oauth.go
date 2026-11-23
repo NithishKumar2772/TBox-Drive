@@ -93,7 +93,13 @@ func NewOAuthClient(cfg OAuthConfig) (*OAuthClient, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &OAuthClient{cfg: cfg, http: client}, nil
+	// OAuth requests carry client secrets and rotating refresh tokens. Never
+	// forward those credentials through an HTTP redirect to another host.
+	safeClient := *client
+	safeClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &OAuthClient{cfg: cfg, http: &safeClient}, nil
 }
 
 func (c *OAuthClient) signature(timestamp int64) string {
