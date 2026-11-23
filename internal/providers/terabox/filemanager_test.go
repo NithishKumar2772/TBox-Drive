@@ -54,7 +54,11 @@ func TestFileManagerRejectsUnsafePathsNamesAndRootOperations(t *testing.T) {
 	if err := api.Copy(ctx, "/From: Other Applications/TBox-Drive-123", "/From: Other Applications/TBox-Drive-123/sub", "copy"); err == nil {
 		t.Fatal("expected application root copy rejection")
 	}
-	if err := api.Rename(ctx, "/From: Other Applications/TBox-Drive-123/file", "../bad"); err == nil { t.Fatal("expected unsafe name rejection") }
+	for _, name := range []string{"../bad", "bad\x00name", "bad\r\nname"} {
+		if err := api.Rename(ctx, "/From: Other Applications/TBox-Drive-123/file", name); err == nil {
+			t.Errorf("expected unsafe name rejection for %q", name)
+		}
+	}
 }
 
 func TestFileManagerRejectsUnconfirmedAndPartialResults(t *testing.T) {
