@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/provider"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
@@ -67,7 +66,6 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 	if taskID==""{var idErr error;taskID,idErr=newTransferID();if idErr!=nil{return provider.UploadResult{},idErr}}
 	result.TaskID=taskID
 	repo:=options.Repository
-	persisted:=false
 	transferred:=int64(0)
 	if repo!=nil{
 		existing,getErr:=repo.GetTransfer(ctx,taskID)
@@ -78,7 +76,6 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 		}else if existing.ProviderID!="terabox"||existing.Direction!="upload"||existing.Source!=localPath||existing.Destination!=remotePath||existing.Size!=stat.Size(){
 			return provider.UploadResult{},errors.New("transfer ID belongs to a different TeraBox upload")
 		}
-		persisted=true
 		defer func(){
 			status:=transfer.StatusFailed;message:="upload failed"
 			if err==nil{status=transfer.StatusCompleted;transferred=stat.Size();message=""}else if errors.Is(err,context.Canceled){status=transfer.StatusCanceled;message="upload canceled"}
@@ -86,7 +83,6 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 		}()
 		if err=repo.UpdateProgress(ctx,taskID,0,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},fmt.Errorf("start TeraBox transfer record: %w",err)}
 	}
-	_ = persisted
 
 	blockMD5:=make([]string,len(chunks))
 	for i,ch:=range chunks{if err=ctx.Err();err!=nil{return provider.UploadResult{},err};h:=md5.New();if _,err=io.Copy(h,io.NewSectionReader(file,ch.Offset,ch.Size));err!=nil{return provider.UploadResult{},fmt.Errorf("hash upload part %d: %w",i,err)};blockMD5[i]=hex.EncodeToString(h.Sum(nil))}
@@ -150,7 +146,7 @@ func(c *APIClient)uploadPart(ctx context.Context,file *os.File,remotePath,upload
 	if resp.StatusCode<200||resp.StatusCode>=300{return "",fmt.Errorf("TeraBox part upload returned HTTP %d",resp.StatusCode)}
 	var result partResponse;if err:=json.Unmarshal(data,&result);err!=nil{return "",fmt.Errorf("decode TeraBox part response: %w",err)}
 	if result.Errno!=0{return "",fmt.Errorf("TeraBox part upload error %d: %s",result.Errno,result.ShowMsg)}
-	if result.MD5==""{return "",errors.New("TeraBox part response omitted MD5")};return result.MD5,nil
+	if result.UploadID!=uploadID{return "",errors.New("TeraBox part response upload ID mismatch")};if result.PartSeq!=part.Index{return "",errors.New("TeraBox part response sequence mismatch")};if result.MD5==""{return "",errors.New("TeraBox part response omitted MD5")};return result.MD5,nil
 }
 func(c *APIClient)postFormJSON(ctx context.Context,endpoint string,form url.Values,dst any)error{
 	req,err:=http.NewRequestWithContext(ctx,http.MethodPost,endpoint,strings.NewReader(form.Encode()));if err!=nil{return err};req.Header.Set("Content-Type","application/x-www-form-urlencoded");return c.getJSON(req,dst)
