@@ -202,7 +202,9 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			if temp != nil { http.Error(w, "only one file per upload request is supported", http.StatusBadRequest); return }
 			if name == "" { name = filepath.Base(part.FileName()) }
 			if err := validateFileName(name); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
-			temp, err = os.CreateTemp("", "tbox-web-upload-*"); if err != nil { writeError(w,err); return }
+			tempDir := os.Getenv("TBOX_UPLOAD_TEMP_DIR")
+			if tempDir == "" { tempDir = os.TempDir() }
+			temp, err = os.CreateTemp(tempDir, "tbox-web-upload-*"); if err != nil { writeError(w,err); return }
 			fileSize, err = io.Copy(temp, part); if err != nil { writeError(w,err); return }
 		}
 		_ = part.Close()
