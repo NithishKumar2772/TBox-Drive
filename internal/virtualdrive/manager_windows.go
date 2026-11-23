@@ -199,7 +199,7 @@ func (fs *cloudFileSystem) OpenFile(name string, flag int, perm os.FileMode) (go
 	if !exists {
 		info = cloudInfo{file: provider.File{Name: path.Base(remote), Path: remote, ModifiedAt: time.Now()}}
 	}
-	return &cloudHandle{file: file, info: info, filesystem: fs, remotePath: remote, dirty: writing}, nil
+	return &cloudHandle{file: file, info: info, filesystem: fs, remotePath: remote, dirty: writing, overwrite: exists}, nil
 }
 
 func (fs *cloudFileSystem) ensureCached(item provider.File) (string, error) {
@@ -242,6 +242,7 @@ type cloudHandle struct {
 	filesystem *cloudFileSystem
 	remotePath string
 	dirty bool
+	overwrite bool
 	entries []os.FileInfo
 	index int
 	closed bool
@@ -297,8 +298,11 @@ func (h *cloudHandle) uploadIfDirty() error {
 	if !h.dirty || h.file==nil || h.filesystem==nil{return nil}
 	if err:=h.file.Sync();err!=nil{return err}
 	api,err:=h.filesystem.apiClient();if err!=nil{return err}
-	if _,err:=api.UploadFile(h.filesystem.ctx,h.file.Name(),h.remotePath,terabox.UploadOptions{});err!=nil{return fmt.Errorf("upload edited virtual-drive file: %w",err)}
+	policy := 0
+	if h.overwrite { policy = 3 }
+	if _,err:=api.UploadFile(h.filesystem.ctx,h.file.Name(),h.remotePath,terabox.UploadOptions{RenamePolicy: &policy});err!=nil{return fmt.Errorf("upload edited virtual-drive file: %w",err)}
 	h.dirty=false
+	h.overwrite=true
 	h.invalidateCache=true
 	return nil
 }
