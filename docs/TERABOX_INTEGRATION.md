@@ -21,6 +21,10 @@ Implemented in `internal/app/TeraBoxService`:
 - Refresh single-use refresh tokens under a mutex and refresh account-specific API domain information
 - Construct an authenticated provider adapter with the durable transfer repository
 
+## OAuth flow
+
+The official integration uses the device authorization endpoint to start QR/device approval, exchanges the approved device code for tokens, obtains account-specific API and upload domains, and refreshes rotating refresh tokens. Polling respects the interval and expiry returned by TeraBox. Refresh-token replacement must be persisted atomically because refresh tokens are single-use.
+
 ## Multipart upload behaviour
 
 The official docs describe three stages: precreate with an ordered MD5 block list, upload the requested shards through the account's `upload_domain`, then call create with the same ordered MD5 list. For multi-shard uploads, each shard must be larger than 4 MiB. The planner balances shard sizes to avoid a too-small final part. Uploads are sequential in this first version. If a part response is ambiguous, the client asks precreate for the authoritative missing-part list before retrying. Completion requires the final create call.
