@@ -74,7 +74,7 @@ func TestUploadFilePersistsTransferAndParts(t *testing.T){
 	defer server.Close()
 	local:=path.Join(t.TempDir(),"big.bin");data:=make([]byte,10<<20);for i:=range data{data[i]=byte(i%251)}
 	if err:=os.WriteFile(local,data,0600);err!=nil{t.Fatal(err)}
-	api,err:=NewAPIClient(APIConfig{AccessToken:"test",TokenInfo:TokenInfo{APIDomain:server.URL,UploadDomain:server.URL},ApplicationRoot:"/From: Other Applications/TBox-Drive-123"});if err!=nil{t.Fatal(err)}
+	api, err := newTestAPI(&httptest.Server{URL: server.URL, Client: server.Client()});if err!=nil{t.Fatal(err)}
 	store,err:=sqlite.Open(":memory:");if err!=nil{t.Fatal(err)};defer store.Close()
 	var progress int64
 	result,err:=api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/big.bin",UploadOptions{ChunkSize:8<<20,OnProgress:func(n,total int64){progress=n},Repository:store,TransferID:"task-upload-1"})
