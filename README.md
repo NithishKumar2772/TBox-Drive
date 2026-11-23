@@ -19,7 +19,7 @@ Manage your TeraBox files with a desktop application, resumable transfers, integ
 
 ## Overview
 
-TBox Drive is an open-source, TeraBox-first cloud file manager and transfer application. Its goal is to make a personal TeraBox account usable through a reliable desktop workspace today, with a shared architecture for future web, mobile, TV, and multi-device clients.
+TBox Drive is an open-source, TeraBox-first cloud file manager and transfer application. Its goal is to make a personal TeraBox account usable through a reliable Windows desktop application and a self-hosted browser workspace, with a shared architecture for future macOS, mobile, TV, and multi-device clients.
 
 The project focuses on dependable large-file transfers, recovery after interruptions, file management, and eventually a virtual drive with streaming, mirroring, and offline access.
 
@@ -43,7 +43,7 @@ TBox Drive is under active development. The current repository contains working 
 | Windows virtual-drive integration | Prototype; requires WinFsp |
 | Production byte-range virtual-drive streaming | Planned |
 | Mirroring, two-way sync and offline pinning | Planned |
-| Browser-based web application | Planned |
+| Self-hosted loopback browser client and Go API | Initial implementation; local-only, under development |
 | Device registration and session management | Planned |
 | Android, iOS and TV applications | Planned |
 
@@ -65,6 +65,14 @@ See [the detailed roadmap](docs/ROADMAP.md) for milestone-level progress and acc
 - Bounded parallel multipart uploads, with a conservative default of two workers in the desktop adapter.
 - Streaming downloads and transfer progress reporting.
 
+### Browser application (self-hosted foundation)
+- Run the Go web service on the user's own Windows PC and open it at http://127.0.0.1:8765.
+- Loopback-only binding; LAN and public network access are rejected.
+- Same-origin checks and browser security headers on the HTTP API.
+- Browser file listing, quota, uploads, downloads, rename, delete and transfer history.
+- OAuth device authorization; provider tokens remain in the OS credential vault and are not returned to browser JavaScript.
+- This is an early implementation, not a production security certification; remote device access is not enabled.
+
 ### Desktop application
 - Wails desktop shell with React and TypeScript frontend.
 - Account connection and file browsing.
@@ -76,7 +84,7 @@ See [the detailed roadmap](docs/ROADMAP.md) for milestone-level progress and acc
 - Production virtual drive with on-demand byte-range streaming.
 - Dynamic cache management, offline pinning and mirroring.
 - Safe two-way synchronization and conflict resolution.
-- Browser client using shared Go application services.
+- Expanded self-hosted browser client using shared Go application services.
 - Authorized-device listing, session revocation and cross-device coordination.
 - Native Android, iOS and TV clients.
 
@@ -159,6 +167,24 @@ npm install
 npm run build
 ```
 
+### Run the self-hosted browser client
+
+Set the TeraBox Open Platform values in the environment. Do not put real credentials in source files or shell history.
+
+**PowerShell:**
+
+```powershell
+$env:TBOX_TERABOX_CLIENT_ID = "your-client-id"
+$env:TBOX_TERABOX_CLIENT_SECRET = "your-client-secret"
+$env:TBOX_TERABOX_PRIVATE_SECRET = "your-private-secret"
+$env:TBOX_TERABOX_APP_FOLDER = "/From: Other Applications/TBox-Drive"
+go run ./cmd/tboxdrive
+```
+
+Open http://127.0.0.1:8765. The server refuses non-loopback bind addresses. Use Ctrl+C to stop it. The same environment variables are used by the desktop app.
+
+See [docs/WEB.md](docs/WEB.md) for the browser API, security boundary and troubleshooting.
+
 ### Build the desktop application
 
 See [docs/DESKTOP.md](docs/DESKTOP.md) for platform-specific Wails setup and build instructions.
@@ -198,6 +224,7 @@ Read the [security documentation](docs/SECURITY.md) before testing with real acc
 | [Provider interface](docs/PROVIDER_INTERFACE.md) | Provider abstraction and extension points |
 | [Database design](docs/DATABASE.md) | Local persistence and data model |
 | [Desktop guide](docs/DESKTOP.md) | Desktop development and build instructions |
+| [Web guide](docs/WEB.md) | Self-hosted browser client setup, API and security boundary |
 | [Security](docs/SECURITY.md) | Credential handling and security requirements |
 
 ## Contributing
