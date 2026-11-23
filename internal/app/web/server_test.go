@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
 	"testing"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
@@ -80,4 +83,20 @@ func TestCloudPathMustStayInsideApplicationFolder(t *testing.T){
 func TestListenAndServeRejectsPublicBindAddress(t *testing.T){
 	server:=testServer(t)
 	if err:=server.ListenAndServe(context.Background(),"0.0.0.0:8765");err==nil{t.Fatal("expected public bind address to be rejected")}
+}
+
+func TestAccountsEndpointDoesNotExposeCredentialReference(t *testing.T) {
+	server := testServer(t)
+	item := account.Account{ID:"terabox:123",ProviderID:"terabox",DisplayName:"Personal account",CredentialRef:"vault-secret-reference"}
+	if err := server.store.Save(context.Background(),item); err != nil { t.Fatal(err) }
+	req := httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/accounts",nil)
+	req.Host = "127.0.0.1:8765"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusOK { t.Fatalf("status = %d, body=%s",response.Code,response.Body.String()) }
+	body := response.Body.String()
+	if strings.Contains(body,"credentialRef") || strings.Contains(body,"vault-secret-reference") {
+		t.Fatalf("account response exposed credential metadata: %s",body)
+	}
+	if !strings.Contains(body,"Personal account") { t.Fatalf("account metadata missing: %s",body) }
 }
