@@ -56,9 +56,22 @@ export default function WebApp() {
   const refreshTransfers = useCallback(async () => setTransfers(await api<Transfer[]>("/api/transfers")), []);
 
   useEffect(() => {
-    void api<{ applicationRoot: string }>("/api/status").then(result => setRoot(result.applicationRoot)).catch(error => setMessage(String(error)));
-    void refreshAccounts().catch(error => setMessage(String(error)));
-    void refreshTransfers().catch(error => setMessage(String(error)));
+    const bootstrap = async () => {
+      const launchToken = window.location.hash.slice(1);
+      if (launchToken) {
+        const response = await fetch("/api/session", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-TBox-Session": launchToken },
+        });
+        if (!response.ok) throw new Error("Invalid local launch URL. Restart TBox Drive and use the URL printed in its console.");
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      const status = await api<{ applicationRoot: string }>("/api/status");
+      setRoot(status.applicationRoot);
+      await Promise.all([refreshAccounts(), refreshTransfers()]);
+    };
+    void bootstrap().catch(error => setMessage(`Local browser session unavailable. Use the private launch URL printed by TBox Drive. ${String(error)}`));
   }, [refreshAccounts, refreshTransfers]);
   useEffect(() => { if (accountID) void refreshFiles(accountID, currentPath).catch(error => setMessage(String(error))); }, [accountID, currentPath, refreshFiles]);
   useEffect(() => { const timer = window.setInterval(() => { void refreshTransfers().catch(() => undefined); }, 5000); return () => window.clearInterval(timer); }, [refreshTransfers]);
