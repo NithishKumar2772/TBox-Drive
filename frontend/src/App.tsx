@@ -23,6 +23,7 @@ declare global {
       ListFiles: (accountID: string, parentPath: string, pageToken: string) => Promise<FilePage>;
       GetStorageQuota: (accountID: string) => Promise<Quota>;
       SelectUploadFile: () => Promise<string>;
+      SelectUploadFiles: () => Promise<string[]>;
       UploadFile: (accountID: string, localPath: string, parentPath: string, name: string, taskID: string) => Promise<UploadResult>;
       DownloadFile: (accountID: string, fileID: string, fileName: string) => Promise<string>;
       ListTransfers: (limit: number) => Promise<Transfer[]>;
@@ -52,6 +53,12 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ transferred: number; total: number } | null>(null);
   const [activeView, setActiveView] = useState<"files" | "transfers">("files");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [nextPageToken, setNextPageToken] = useState("");
+  const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
+    const saved = window.localStorage.getItem("tbox-theme");
+    return saved === "light" || saved === "dark" ? saved : "system";
+  });
 
   const refreshAccounts = useCallback(async () => {
     const api = desktop();
@@ -68,11 +75,24 @@ export default function App() {
     try {
       const page = await api.ListFiles(id, folder, "");
       setFiles(page.files ?? []);
+      setNextPageToken(page.nextPageToken ?? "");
       const q = await api.GetStorageQuota(id);
       setQuota(q);
     } catch (e) { setMessage(String(e)); }
     finally { setBusy(false); }
   }, [accountID, currentPath]);
+
+  const loadMoreFiles = async () => {
+    const api = desktop();
+    if (!api || !accountID || !nextPageToken || busy) return;
+    setBusy(true);
+    try {
+      const page = await api.ListFiles(accountID, currentPath, nextPageToken);
+      setFiles(previous => [...previous, ...(page.files ?? [])]);
+      setNextPageToken(page.nextPageToken ?? "");
+    } catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
 
   const refreshTransfers = useCallback(async () => {
     const api = desktop();
@@ -93,6 +113,17 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (accountID) refreshFiles(accountID, currentPath); }, [accountID, currentPath, refreshFiles]);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const applyTheme = () => {
+      const selected = theme === "system" ? (media.matches ? "light" : "dark") : theme;
+      document.documentElement.dataset.theme = selected;
+    };
+    applyTheme();
+    window.localStorage.setItem("tbox-theme", theme);
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, [theme]);
   useEffect(() => { if (activeView === "transfers") refreshTransfers(); }, [activeView, refreshTransfers]);
 
   const connect = async () => {
@@ -116,11 +147,22 @@ export default function App() {
     if (!api || !accountID) return;
     setBusy(true); setMessage(""); setProgress(null);
     try {
-      const localPath = await api.SelectUploadFile();
-      if (!localPath) return;
-      const name = localPath.split(/[\\/]/).pop() ?? "upload";
-      const result = await api.UploadFile(accountID, localPath, currentPath, name, "");
-      setMessage(`Uploaded ${result.file.name}`);
+      const localPaths = await api.SelectUploadFiles();
+      if (!localPaths.length) return;
+      const failed: string[] = [];
+      let completed = 0;
+      for (const localPath of localPaths) {
+        const name = localPath.split(/[\\\\/]/).pop() ?? "upload";
+        setMessage(`Uploading ${completed + 1} of ${localPaths.length}: ${name}`);
+        try {
+          const result = await api.UploadFile(accountID, localPath, currentPath, name, "");
+          completed += 1;
+          setMessage(`Uploaded ${completed} of ${localPaths.length}: ${result.file.name}`);
+        } catch (error) {
+          failed.push(`${name}: ${String(error)}`);
+        }
+      }
+      setMessage(failed.length ? `Uploaded ${completed} of ${localPaths.length}. Failed: ${failed.join("; ")}` : `Successfully uploaded ${completed} file(s).`);
       await refreshFiles(); await refreshTransfers();
     } catch (e) { setMessage(String(e)); await refreshTransfers(); }
     finally { setBusy(false); }
@@ -201,6 +243,7 @@ export default function App() {
           <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{activeView === "files" ? "My Files" : "Transfers"}</h1></div>
           <div className="header-actions">
             {accountID && activeView === "files" && <button onClick={upload} disabled={busy}>Upload file</button>}
+            <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
             {!accounts.length && <button onClick={connect} disabled={busy || !status?.ready}>Connect TeraBox</button>}
           </div>
         </header>
@@ -225,6 +268,7 @@ export default function App() {
             <div className="panel-head">
               <div><p className="eyebrow">CLOUD FILE EXPLORER</p><h2>{currentPath ? currentPath.split("/").pop() : "Application folder"}</h2></div>
               <div className="panel-actions">
+                <input className="search-input" type="search" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search this folder…" aria-label="Search current folder" />
                 {currentPath && <button className="secondary" onClick={parentFolder}>Up one level</button>}
                 <button className="secondary" onClick={() => refreshFiles()} disabled={busy}>Refresh</button>
                 {accountID && <button className="secondary danger" onClick={disconnect} disabled={busy}>Disconnect</button>}
@@ -233,7 +277,7 @@ export default function App() {
             {!accountID ? <div className="empty"><div className="empty-icon">☁</div><h3>No cloud account connected</h3><p>Connect TeraBox to browse and transfer your files.</p></div> :
               <div className="file-list">
                 <div className="file-row file-heading"><span>Name</span><span>Size</span><span>Modified</span><span>Action</span></div>
-                {files.map(file => <div className="file-row" key={file.id}>
+                {files.filter(file => file.name.toLowerCase().includes(searchTerm.trim().toLowerCase())).map(file => <div className="file-row" key={file.id}>
                   <button className="file-name" onClick={() => file.isDirectory && setCurrentPath(file.path)} disabled={!file.isDirectory}>
                     <span className="file-icon">{file.isDirectory ? "▰" : "▤"}</span>{file.name}
                   </button>
@@ -245,7 +289,8 @@ export default function App() {
                     <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
                   </span>
                 </div>)}
-                {!files.length && <div className="empty compact"><h3>{busy ? "Loading files…" : "This folder is empty"}</h3><p>Files from your TeraBox application folder will appear here.</p></div>}
+                {!files.filter(file => file.name.toLowerCase().includes(searchTerm.trim().toLowerCase())).length && <div className="empty compact"><h3>{busy ? "Loading files…" : searchTerm ? "No matching files" : "This folder is empty"}</h3><p>{searchTerm ? "Try a different search term." : "Files from your TeraBox application folder will appear here."}</p></div>}
+                {nextPageToken && <div className="load-more"><button className="secondary" onClick={loadMoreFiles} disabled={busy}>Load more files</button></div>}
               </div>}
           </article>
         </>}
