@@ -9,14 +9,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	_ "modernc.org/sqlite"
 )
 
 type Store struct { db *sql.DB }
 type Part = transfer.Part
-
 var _ transfer.Repository = (*Store)(nil)
+var _ account.Repository = (*Store)(nil)
 
 func Open(path string)(*Store,error){
 	if path==""{return nil,errors.New("database path is required")}
@@ -38,10 +39,34 @@ CREATE TABLE IF NOT EXISTS provider_sessions(transfer_id TEXT PRIMARY KEY REFERE
 CREATE TABLE IF NOT EXISTS transfer_events(id INTEGER PRIMARY KEY AUTOINCREMENT,transfer_id TEXT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,event_type TEXT NOT NULL,created_at TEXT NOT NULL);`
 	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return err};defer tx.Rollback()
 	if _,err:=tx.ExecContext(ctx,schema);err!=nil{return fmt.Errorf("apply SQLite schema: %w",err)}
-	if _,err:=tx.ExecContext(ctx,"INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,?)",time.Now().UTC().Format(time.RFC3339Nano));err!=nil{return err};return tx.Commit()
+	if _,err:=tx.ExecContext(ctx,"INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,?)",time.Now().UTC().Format(time.RFC3339Nano));err!=nil{return err}
+	return tx.Commit()
+}
+func(s *Store)Save(ctx context.Context,a account.Account)error{
+	if a.ID==""||a.ProviderID==""||a.CredentialRef==""{return errors.New("account ID, provider and credential reference are required")}
+	now:=time.Now().UTC();if a.CreatedAt.IsZero(){a.CreatedAt=now};if a.UpdatedAt.IsZero(){a.UpdatedAt=now}
+	_,err:=s.db.ExecContext(ctx,`INSERT INTO accounts(id,provider_id,display_name,credential_ref,created_at,updated_at) VALUES(?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET provider_id=excluded.provider_id,display_name=excluded.display_name,credential_ref=excluded.credential_ref,updated_at=excluded.updated_at`,
+		a.ID,a.ProviderID,a.DisplayName,a.CredentialRef,a.CreatedAt.UTC().Format(time.RFC3339Nano),a.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	if err!=nil{return fmt.Errorf("save account: %w",err)};return nil
+}
+func(s *Store)Get(ctx context.Context,id string)(account.Account,error){
+	var a account.Account;var created,updated string
+	err:=s.db.QueryRowContext(ctx,`SELECT id,provider_id,display_name,credential_ref,created_at,updated_at FROM accounts WHERE id=?`,id).Scan(&a.ID,&a.ProviderID,&a.DisplayName,&a.CredentialRef,&created,&updated)
+	if err!=nil{return account.Account{},err};a.CreatedAt,_=time.Parse(time.RFC3339Nano,created);a.UpdatedAt,_=time.Parse(time.RFC3339Nano,updated);return a,nil
+}
+func(s *Store)List(ctx context.Context)([]account.Account,error){
+	rows,err:=s.db.QueryContext(ctx,`SELECT id,provider_id,display_name,credential_ref,created_at,updated_at FROM accounts ORDER BY created_at`);if err!=nil{return nil,err};defer rows.Close()
+	items:=make([]account.Account,0)
+	for rows.Next(){var a account.Account;var created,updated string;if err:=rows.Scan(&a.ID,&a.ProviderID,&a.DisplayName,&a.CredentialRef,&created,&updated);err!=nil{return nil,err};a.CreatedAt,_=time.Parse(time.RFC3339Nano,created);a.UpdatedAt,_=time.Parse(time.RFC3339Nano,updated);items=append(items,a)}
+	return items,rows.Err()
+}
+func(s *Store)Delete(ctx context.Context,id string)error{
+	result,err:=s.db.ExecContext(ctx,`DELETE FROM accounts WHERE id=?`,id);if err!=nil{return err};n,err:=result.RowsAffected();if err!=nil{return err};if n==0{return sql.ErrNoRows};return nil
 }
 func(s *Store)CreateTransfer(ctx context.Context,t transfer.Task)error{
-	if t.ID==""||t.ProviderID==""||t.Direction==""{return errors.New("transfer ID, provider and direction are required")};if t.Size<0||t.Transferred<0||t.Transferred>t.Size{return errors.New("invalid transfer byte counts")}
+	if t.ID==""||t.ProviderID==""||t.Direction==""{return errors.New("transfer ID, provider and direction are required")}
+	if t.Size<0||t.Transferred<0||t.Transferred>t.Size{return errors.New("invalid transfer byte counts")}
 	now:=time.Now().UTC();if t.CreatedAt.IsZero(){t.CreatedAt=now};if t.UpdatedAt.IsZero(){t.UpdatedAt=now};if t.Status==""{t.Status=transfer.StatusQueued}
 	_,err:=s.db.ExecContext(ctx,`INSERT INTO transfers(id,provider_id,direction,source,destination,size,transferred,status,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,t.ID,t.ProviderID,t.Direction,t.Source,t.Destination,t.Size,t.Transferred,string(t.Status),t.Error,t.CreatedAt.UTC().Format(time.RFC3339Nano),t.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	if err!=nil{return fmt.Errorf("create transfer: %w",err)};return nil
