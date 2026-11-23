@@ -46,7 +46,8 @@ User access and refresh tokens are stored in the OS credential vault. SQLite sto
 - Profile dropdown and settings screen
 - Configurable automatic current-folder and transfer-list refresh (30-second interval)
 - Automatic GitHub latest-release check preference and manual check
-- Upload throughput and estimated-time-remaining display\n- TeraBox multipart upload already divides large files into internal 8 MiB parts and finalizes them as one cloud file; files over 4 GiB still need real-account acceptance testing.
+- Upload throughput and estimated-time-remaining display
+- TeraBox multipart upload already divides large files into internal 8 MiB parts and finalizes them as one cloud file; files over 4 GiB still need real-account acceptance testing.
 - Windows virtual-drive mount/unmount controls
 
 ## Profile, settings and transfer monitoring
