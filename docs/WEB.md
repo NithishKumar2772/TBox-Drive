@@ -35,12 +35,12 @@ To use another local port, set `TBOX_WEB_ADDR` to a loopback address such as `12
 - View storage quota.
 - Upload one or more selected files sequentially, with browser-to-local-service byte progress and a cancel action for the active request.
 - View persisted TeraBox transfer byte progress while the server finalizes each upload.
-- Download files through the browser.
+- Stream downloads directly through the browser with persisted provider-side byte progress; cancellation is handled by the browser's native download manager.
 - Rename, move, copy and delete cloud items.
 - View persisted transfer records and their progress/error state.
 - Disconnect a TeraBox account.
 
-Folder upload with nested directory preservation, pause/resume/retry controls, full transfer queue management, cancellable downloads and virtual-drive mounting are not yet available in the browser client. The upload progress bar reports bytes sent from the browser to the local service; the Transfers view separately reads persisted provider-side byte progress. Cancelling an upload aborts the HTTP request and cancels its server-side context; the transfer record is marked canceled where the provider upload has started. A dedicated resume action is not yet exposed in the browser UI.
+Folder upload with nested directory preservation, pause/resume/retry controls, in-app download cancellation, full transfer queue management and virtual-drive mounting are not yet available in the browser client. The browser's native download manager can cancel an active download; the server records the resulting canceled request when the connection is closed. The upload progress bar reports bytes sent from the browser to the local service; the Transfers view separately reads persisted provider-side byte progress. Cancelling an upload aborts the HTTP request and cancels its server-side context; the transfer record is marked canceled where the provider upload has started. A dedicated resume action is not yet exposed in the browser UI.
 
 ## API surface
 
