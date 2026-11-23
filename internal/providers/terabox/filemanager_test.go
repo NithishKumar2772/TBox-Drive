@@ -51,7 +51,9 @@ func TestFileManagerRejectsUnsafePathsNamesAndRootOperations(t *testing.T) {
 		if err := api.Rename(ctx, p, "renamed"); err == nil { t.Errorf("expected root rename rejection for %q", p) }
 		if err := api.Move(ctx, p, "/From: Other Applications/TBox-Drive-123/sub", "moved"); err == nil { t.Errorf("expected root move rejection for %q", p) }
 	}
-	if err := api.Copy(ctx, "/From: Other Applications/TBox-Drive-123/file", "/From: Other Applications/TBox-Drive-123", "copy"); err != nil && err.Error() == "" { t.Fatal(err) }
+	if err := api.Copy(ctx, "/From: Other Applications/TBox-Drive-123", "/From: Other Applications/TBox-Drive-123/sub", "copy"); err == nil {
+		t.Fatal("expected application root copy rejection")
+	}
 	if err := api.Rename(ctx, "/From: Other Applications/TBox-Drive-123/file", "../bad"); err == nil { t.Fatal("expected unsafe name rejection") }
 }
 
@@ -69,4 +71,28 @@ func TestFileManagerRejectsUnconfirmedAndPartialResults(t *testing.T) {
 func newTestAPI(s *httptest.Server) (*APIClient,error) {
 	cfg := APIConfig{AccessToken:"token", TokenInfo:TokenInfo{APIDomain:s.URL,UploadDomain:s.URL}, ApplicationRoot:"/From: Other Applications/TBox-Drive-123", HTTPClient:s.Client()}
 	return newTestAPIWithLoopback(cfg)
+}
+
+func TestFileManagerCopyPayload(t *testing.T) {
+	requests := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Query().Get("opera") != "copy" {
+			t.Errorf("operation = %q, want copy", r.URL.Query().Get("opera"))
+		}
+		if err := r.ParseForm(); err != nil { t.Error(err) }
+		var items []fileManagerItem
+		if err := json.Unmarshal([]byte(r.Form.Get("filelist")), &items); err != nil { t.Error(err) }
+		if len(items) != 1 || items[0].Path != "/From: Other Applications/TBox-Drive-123/source.txt" || items[0].Dest != "/From: Other Applications/TBox-Drive-123/archive" || items[0].NewName != "source copy.txt" {
+			t.Errorf("bad copy payload: %#v", items)
+		}
+		fmt.Fprint(w, `{"errno":0,"info":[{"errno":0,"path":"/From: Other Applications/TBox-Drive-123/archive/source copy.txt"}]}`)
+	}))
+	defer s.Close()
+	api, err := newTestAPI(s)
+	if err != nil { t.Fatal(err) }
+	if err := api.Copy(context.Background(), "/From: Other Applications/TBox-Drive-123/source.txt", "/From: Other Applications/TBox-Drive-123/archive", "source copy.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 { t.Fatalf("requests = %d, want 1", requests) }
 }
