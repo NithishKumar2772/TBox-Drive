@@ -179,3 +179,20 @@ func TestValidateFileNameRejectsPathComponents(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
+	server := testServer(t)
+	body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/file.txt","destination":"/Apps/Other"}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/files/copy", strings.NewReader(body))
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin", "http://127.0.0.1:8765")
+	req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "inside the TBox Drive application folder") {
+		t.Fatalf("unexpected validation response: %s", response.Body.String())
+	}
+}
