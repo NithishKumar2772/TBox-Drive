@@ -21,6 +21,17 @@ import (
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
 
+func TestUploadFileRejectsUnsafeParallelPartCount(t *testing.T) {
+	api, err := newTestAPI(httptest.NewServer(http.NotFoundHandler()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = api.UploadFile(context.Background(), "does-not-need-to-exist", "/From: Other Applications/TBox-Drive-123/file.bin", UploadOptions{MaxParallelParts: 5})
+	if err == nil || !strings.Contains(err.Error(), "between 0 and 4") {
+		t.Fatalf("expected bounded concurrency validation error, got %v", err)
+	}
+}
+
 func TestPlanTeraBoxChunks(t *testing.T){
 	chunks,err:=PlanTeraBoxChunks(10<<20,8<<20);if err!=nil{t.Fatal(err)}
 	if len(chunks)!=2{t.Fatalf("want 2 chunks, got %d",len(chunks))}
