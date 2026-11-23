@@ -1,0 +1,4 @@
+package transfer
+import("errors";"path/filepath";"testing")
+func TestJournalSaveLoad(t *testing.T){chunks,err:=PlanChunks(10,4);if err!=nil{t.Fatal(err)};j,err:=NewUploadJournal("task","source.bin",10,123,4,chunks);if err!=nil{t.Fatal(err)};if err:=j.MarkCompleted(0,"etag","sum");err!=nil{t.Fatal(err)};s:=NewJournalStore(filepath.Join(t.TempDir(),"state","journal.json"));if err:=s.Save(j);err!=nil{t.Fatal(err)};got,err:=s.Load();if err!=nil{t.Fatal(err)};if got.CompletedBytes()!=4||len(got.Pending())!=2||got.Chunks[0].ETag!="etag"{t.Fatalf("bad journal %#v",got)}}
+func TestJournalDuplicateAndUnknown(t *testing.T){j,_:=NewUploadJournal("task","file",4,1,4,[]Chunk{{0,0,4}});if err:=j.MarkCompleted(0,"","");err!=nil{t.Fatal(err)};if !errors.Is(j.MarkCompleted(0,"",""),ErrChunkAlreadyCompleted){t.Fatal("expected duplicate")};if err:=j.MarkCompleted(9,"","");err==nil{t.Fatal("expected unknown")}}

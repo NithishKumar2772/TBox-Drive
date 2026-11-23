@@ -1,0 +1,4 @@
+package transfer
+import("context";"fmt";"sync")
+// RunWorkers bounds concurrent jobs and cancels scheduling after the first failure.
+func RunWorkers[T any](ctx context.Context,jobs []T,workers int,run func(context.Context,T)error)error{if workers<1{return fmt.Errorf("workers must be at least 1")};if run==nil{return fmt.Errorf("worker function is required")};if len(jobs)==0{return ctx.Err()};ctx,cancel:=context.WithCancel(ctx);defer cancel();queue:=make(chan T);errCh:=make(chan error,1);var wg sync.WaitGroup;for i:=0;i<workers;i++{wg.Add(1);go func(){defer wg.Done();for job:=range queue{if ctx.Err()!=nil{return};if err:=run(ctx,job);err!=nil{select{case errCh<-err:cancel();default:};return}}}()};go func(){defer close(queue);for _,job:=range jobs{select{case<-ctx.Done():return;case queue<-job:}}}();wg.Wait();select{case err:=<-errCh:return err;default:return ctx.Err()}}
