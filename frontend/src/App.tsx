@@ -67,7 +67,8 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<TransferProgress | null>(null);
-  const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);\n  const autoRefreshInFlight = useRef(false);
+  const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
+  const autoRefreshInFlight = useRef(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(() => window.localStorage.getItem("tbox-auto-refresh") !== "false");
   const [autoUpdateCheck, setAutoUpdateCheck] = useState(() => window.localStorage.getItem("tbox-auto-update-check") !== "false");
