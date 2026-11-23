@@ -8,45 +8,58 @@
 - [x] Retry policy and unit tests
 - [x] SQLite account/transfer/part/session repository
 
-## M1 TeraBox account and authentication
+## M1 TeraBox account and transfer foundation
 - [x] Official OAuth device QR request and polling
 - [x] Authorization-code/device-code exchange and refresh
-- [x] Token info and account-specific API domains
-- [x] Account connection service
-- [x] OS credential vault adapter (Windows/macOS/Linux)
-- [ ] TeraBox application approval and real account verification
-- [ ] Wails UI connection flow
+- [x] Token information and account-specific API domains
+- [x] Account connection service and OS credential vault adapter
+- [x] Paginated file listing and quota lookup
+- [x] Streaming download and multipart upload foundation
+- [x] Durable transfer records and resumable part reconciliation
+- [x] Desktop account connection, file listing, single-file transfer UI
+- [x] Multi-file selection and sequential upload UI
+- [x] Current-folder search, pagination control and appearance selector
+- [ ] Real TeraBox account verification with an approved Open Platform app
+- [ ] Empty-file upload and bounded parallel uploads
 
-## M2 TeraBox file operations
-- [x] Paginated file listing
-- [x] Storage quota lookup
-- [x] Streaming download
-- [x] Multipart upload and MD5 part verification
-- [x] Resume discovery and retry after ambiguous part responses
-- [x] Persist transfer task, session and completed part state
-- [ ] Empty-file upload
-- [ ] Folder create/rename/delete and file delete
-- [ ] Real account integration tests
+## M2 File management and desktop explorer
+- [x] Rename, move and delete API adapter methods (verify against authorized account)
+- [ ] Officially documented directory creation method
+- [ ] Folder upload preserving nested structure
+- [ ] Explorer sorting, richer file properties and previews
+- [ ] Pause/resume/cancel controls and transfer queue recovery UX
+- [ ] Native Windows File Explorer virtual drive integration
+- [ ] macOS Finder/File Provider integration
+- [ ] Linux mount/file-manager integration
 
-## M3 Transfer engine
-- [x] Provider-aware shard planner
-- [x] Exponential retry policy
-- [x] SQLite transfer repository wired into TeraBox adapter
-- [x] Resume by transfer ID
-- [ ] Bounded parallel part upload
-- [ ] Pause/resume UI and crash recovery experience
+## M3 Hybrid drive and synchronization
+- [ ] Streaming, mirroring and hybrid per-folder policies
+- [ ] On-demand file hydration and smart local cache
+- [ ] Offline pinning and cache eviction policy
+- [ ] Two-way change detection and synchronization journal
+- [ ] Conflict detection and resolution UI
+- [ ] Reconnect and background sync service
 
-## M4 Desktop
-- [ ] Wails integration
-- [ ] React explorer connected to backend services
-- [ ] Transfer dashboard and account settings
+## M4 Security and media
+- [ ] Reviewed XChaCha20-Poly1305 file container and key lifecycle
+- [ ] Per-upload encryption choice and local decryption
+- [ ] Encrypted cache and recovery-key workflow
+- [ ] Image/PDF/text/code preview and media gallery
+- [ ] Audio/video streaming, subtitles, playback position and MPV integration
+- [ ] ZIP/TAR/TAR.GZ import and optional extraction
 
-## M5 Multi-cloud
-- [ ] Provider conformance suite
-- [ ] Google Drive, OneDrive, Dropbox, S3 and WebDAV as separate milestones
+## M5 Mobile and TV clients
+- [ ] Android 7+ client
+- [ ] iOS/iPadOS client
+- [ ] Android TV / Google TV / Fire TV client
+- [ ] Samsung Tizen TV client
+- [ ] LG webOS TV client
+- [ ] Shared 24-locale language framework and system-language detection
 
-## M6 Advanced
-- [ ] Cloud-to-cloud transfer
-- [ ] Sync and backup
-- [ ] Virtual drive
-- [ ] Mobile clients
+## M6 Release engineering
+- [ ] Windows x64/ARM64 packaging
+- [ ] macOS Intel/Apple Silicon packaging and signing
+- [ ] Linux AppImage/DEB/RPM/Arch packaging
+- [ ] Android/iOS/TV store packaging
+- [ ] Accessibility, security, performance and upgrade testing
+- [ ] Live-provider acceptance test suite
