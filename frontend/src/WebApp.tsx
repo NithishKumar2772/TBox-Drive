@@ -107,18 +107,14 @@ export default function WebApp() {
 
   const download = async (file: CloudFile) => {
     const query = new URLSearchParams({ account_id: accountID, file_id: file.id, name: file.name });
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/download?${query}`);
-      if (!response.ok) throw new Error(`Download failed (${response.status})`);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = file.name; anchor.click();
-      URL.revokeObjectURL(url);
-      setMessage(`Downloaded ${file.name}`);
-    } catch (error) { setMessage(String(error)); }
-    finally { setBusy(false); }
+    const anchor = document.createElement("a");
+    anchor.href = `/api/download?${query}`;
+    anchor.download = file.name;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setMessage(`Download started: ${file.name}`);
   };
   const rename = async (file: CloudFile) => {
     const name = window.prompt("Rename item", file.name);
