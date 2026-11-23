@@ -127,3 +127,55 @@ func TestLaunchTokenExchangesForHttpOnlySessionCookie(t *testing.T) {
 		t.Fatalf("unexpected session cookie: %#v",cookie)
 	}
 }
+
+func TestParsePageDefaultsAndValidates(t *testing.T) {
+	tests := []struct {
+		name string
+		value string
+		want int
+	}{
+		{name: "empty", value: "", want: 1},
+		{name: "zero", value: "0", want: 1},
+		{name: "negative", value: "-4", want: 1},
+		{name: "invalid", value: "next", want: 1},
+		{name: "page two", value: "2", want: 2},
+		{name: "large page", value: "250", want: 250},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parsePage(test.value); got != test.want {
+				t.Fatalf("parsePage(%q) = %d, want %d", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+func TestMoveEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
+	server := testServer(t)
+	body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/file.txt","destination":"/Apps/Other"}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/files/move", strings.NewReader(body))
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin", "http://127.0.0.1:8765")
+	req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "inside the TBox Drive application folder") {
+		t.Fatalf("unexpected validation response: %s", response.Body.String())
+	}
+}
+
+func TestValidateFileNameRejectsPathComponents(t *testing.T) {
+	for _, name := range []string{"", " ", ".", "..", "../secret", `folder\\file.txt`, "folder/file.txt"} {
+		if err := validateFileName(name); err == nil {
+			t.Errorf("validateFileName(%q) accepted an unsafe name", name)
+		}
+	}
+	for _, name := range []string{"report.pdf", "folder name", "資料.txt"} {
+		if err := validateFileName(name); err != nil {
+			t.Errorf("validateFileName(%q) rejected a valid filename: %v", name, err)
+		}
+	}
+}
