@@ -223,14 +223,84 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"file":result.File,"taskID":id,"size":fileSize})
 }
 func (s *Server) download(w http.ResponseWriter, r *http.Request) {
-	api, _, err := s.apiClient(r); if err != nil { writeError(w,err); return }
-	fileID := strings.TrimSpace(r.URL.Query().Get("file_id")); if fileID == "" { http.Error(w,"file_id is required",http.StatusBadRequest); return }
-	name := filepath.Base(r.URL.Query().Get("name")); if name == "." || name == "/" || name == "" { name = "download" }
-	body, err := api.Download(r.Context(),fileID); if err != nil { writeError(w,err); return }; defer body.Close()
-	w.Header().Set("Content-Type","application/octet-stream")
-	w.Header().Set("Content-Disposition",mime.FormatMediaType("attachment",map[string]string{"filename":name}))
-	w.Header().Set("Cache-Control","no-store")
-	_, _ = io.Copy(w,body)
+	api, accountID, err := s.apiClient(r)
+	if err != nil { writeError(w, err); return }
+	fileID := strings.TrimSpace(r.URL.Query().Get("file_id"))
+	if fileID == "" { http.Error(w, "file_id is required", http.StatusBadRequest); return }
+	name := filepath.Base(r.URL.Query().Get("name"))
+	if name == "." || name == "/" || name == "" { name = "download" }
+	if err := validateFileName(name); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	body, size, err := api.DownloadWithSize(r.Context(), fileID)
+	if err != nil { writeError(w, err); return }
+	defer body.Close()
+
+	var transferID string
+	tracked := size >= 0
+	if tracked {
+		transferID, err = randomID()
+		if err != nil { writeError(w, err); return }
+		task := transfer.Task{ID: transferID, ProviderID: "terabox", Direction: "download", Source: fileID, Destination: name, Size: size, Status: transfer.StatusQueued}
+		if err := s.store.CreateTransfer(r.Context(), task); err != nil { writeError(w, err); return }
+		if err := s.store.UpdateProgress(r.Context(), transferID, 0, transfer.StatusRunning, ""); err != nil {
+			_ = s.store.UpdateProgress(context.Background(), transferID, 0, transfer.StatusFailed, "could not start download tracking")
+			writeError(w, err)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	w.Header().Set("Cache-Control", "no-store")
+	if tracked { w.Header().Set("Content-Length", strconv.FormatInt(size, 10)) }
+
+	var destination io.Writer = w
+	var progress *downloadResponseWriter
+	if tracked {
+		progress = &downloadResponseWriter{writer: w, store: s.store, transferID: transferID, total: size}
+		destination = progress
+	}
+	written, copyErr := io.Copy(destination, body)
+	if progress != nil { progress.report() }
+	if tracked {
+		status, message := transfer.StatusCompleted, ""
+		if copyErr != nil {
+			status, message = transfer.StatusFailed, copyErr.Error()
+			if errors.Is(r.Context().Err(), context.Canceled) { status, message = transfer.StatusCanceled, "download canceled" }
+		} else if written != size {
+			status, message = transfer.StatusFailed, fmt.Sprintf("download size mismatch: expected %d bytes, received %d", size, written)
+		}
+		transferred := written
+		if transferred > size { transferred = size }
+		_ = s.store.UpdateProgress(context.Background(), transferID, transferred, status, message)
+	}
+}
+
+type downloadResponseWriter struct {
+	writer io.Writer
+	store *sqlite.Store
+	transferID string
+	total int64
+	transferred int64
+	lastReported int64
+	lastReport time.Time
+}
+
+func (w *downloadResponseWriter) Write(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
+	w.transferred += int64(n)
+	if n > 0 && (w.transferred-w.lastReported >= 1<<20 || time.Since(w.lastReport) >= 200*time.Millisecond || err != nil) {
+		w.report()
+	}
+	return n, err
+}
+
+func (w *downloadResponseWriter) report() {
+	if w.transferred == w.lastReported { return }
+	transferred := w.transferred
+	if transferred > w.total { transferred = w.total }
+	_ = w.store.UpdateProgress(context.Background(), w.transferID, transferred, transfer.StatusRunning, "")
+	w.lastReported = w.transferred
+	w.lastReport = time.Now()
 }
 func (s *Server) transfers(w http.ResponseWriter, r *http.Request) {
 	items, err := s.store.ListTransfers(r.Context(),100); if err != nil { writeError(w,err); return }
