@@ -167,7 +167,7 @@ npm install
 npm run build
 ```
 
-### Run the self-hosted browser client
+### Build both Windows applications\n\nFrom PowerShell, run:\n\n```powershell\n.\\scripts\\build-windows.ps1\n```\n\nThe script builds the Wails desktop app and the self-hosted browser executable into the repository's `dist` directory.\n\n### Run the self-hosted browser client
 
 Set the TeraBox Open Platform values in the environment. Do not put real credentials in source files or shell history.
 
