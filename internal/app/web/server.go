@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -31,18 +32,22 @@ type Server struct {
 	service *app.TeraBoxService
 	store *sqlite.Store
 	applicationRoot string
+	sessionToken string
 	assets http.Handler
 }
 
 func NewServer(service *app.TeraBoxService, store *sqlite.Store, applicationRoot string) (*Server, error) {
 	if service == nil || store == nil { return nil, errors.New("TeraBox service and local store are required") }
 	if strings.TrimSpace(applicationRoot) == "" { return nil, errors.New("TeraBox application folder is required") }
-	return &Server{service: service, store: store, applicationRoot: strings.TrimRight(applicationRoot, "/"), assets: http.FileServer(http.FS(Assets))}, nil
+	token, err := newSessionToken()
+	if err != nil { return nil, fmt.Errorf("create local browser session token: %w", err) }
+	return &Server{service: service, store: store, applicationRoot: strings.TrimRight(applicationRoot, "/"), sessionToken: token, assets: http.FileServer(http.FS(Assets))}, nil
 }
 
 // Handler returns the HTTP handler. All routes are same-origin and loopback only.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/session", s.createSession)
 	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("GET /api/accounts", s.accounts)
 	mux.HandleFunc("POST /api/connect/start", s.connectStart)
@@ -72,6 +77,12 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 				http.Error(w, "cross-site request rejected", http.StatusForbidden); return
 			}
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/session" {
+			cookie, err := r.Cookie("tbox_local_session")
+			if err != nil || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(s.sessionToken)) != 1 {
+				http.Error(w, "local browser session required; open the launch URL printed by TBox Drive", http.StatusUnauthorized); return
+			}
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -98,6 +109,32 @@ func (s *Server) serveAssets(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" { w.Header().Set("Cache-Control", "no-store") }
 	s.assets.ServeHTTP(w, r)
 }
+func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("X-TBox-Session")
+	if subtle.ConstantTimeCompare([]byte(token), []byte(s.sessionToken)) != 1 {
+		http.Error(w, "invalid local browser launch token", http.StatusUnauthorized)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: "tbox_local_session", Value: s.sessionToken, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteStrictMode, MaxAge: 8 * 60 * 60,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func newSessionToken() (string, error) {
+	var value [32]byte
+	if _, err := rand.Read(value[:]); err != nil { return "", err }
+	return hex.EncodeToString(value[:]), nil
+}
+
+// LaunchURL returns the one-time-to-share local launch URL. The fragment is
+// not sent in HTTP requests or Referer headers; the browser exchanges it for
+// an HttpOnly same-site cookie.
+func (s *Server) LaunchURL(address string) string {
+	return "http://" + address + "/#" + s.sessionToken
+}
+
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ready": true, "message": "TBox Drive local web service is ready", "applicationRoot": s.applicationRoot})
 }
