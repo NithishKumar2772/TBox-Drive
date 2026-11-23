@@ -62,9 +62,12 @@ func NewAPIClient(cfg APIConfig) (*APIClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid TeraBox upload domain: %w", err)
 	}
-	root, err := normalizeAbsoluteCloudPath(cfg.ApplicationRoot)
-	if err != nil {
-		return nil, fmt.Errorf("invalid TeraBox application root: %w", err)
+	root := ""
+	if strings.TrimSpace(cfg.ApplicationRoot) != "" {
+		root, err = normalizeAbsoluteCloudPath(cfg.ApplicationRoot)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TeraBox application root: %w", err)
+		}
 	}
 
 	client := cfg.HTTPClient
