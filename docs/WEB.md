@@ -59,7 +59,7 @@ Folder upload with nested directory preservation, pause/resume/cancel, live brow
 | POST | /api/files/delete | Delete a cloud item |
 | POST | /api/files/move | Move a cloud item |
 
-All cloud paths supplied by the browser are constrained to the configured TBox Drive application folder. Uploads are staged to a temporary local file and removed when the request finishes.
+All cloud paths supplied by the browser are constrained to the configured TBox Drive application folder. Uploads are staged to a temporary local file and removed when the request finishes. A browser upload therefore needs temporary-disk space roughly equal to the file size before the provider upload can begin; select a temp drive with sufficient free space for very large files.
 
 ## Security boundary and limitations
 
