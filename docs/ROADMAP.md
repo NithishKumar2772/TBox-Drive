@@ -25,7 +25,9 @@
 - [x] Upload throughput and estimated-time-remaining display
 - [ ] Add and verify automatic >4 GiB multipart upload acceptance test using an approved TeraBox account; confirm final object is one file
 - [ ] Real TeraBox account verification with an approved Open Platform app
-- [ ] Empty-file upload and bounded parallel uploads
+- [ ] Empty-file upload
+- [x] Opt-in bounded multipart concurrency (1–4 workers) with sequential default and local HTTP concurrency test
+- [ ] Benchmark safe provider concurrency against an authorized TeraBox account; keep default conservative until verified
 
 ## M2 File management and desktop explorer
 - [x] Rename, move and delete API adapter methods (verify against authorized account)
@@ -68,7 +70,12 @@
 - [ ] Audio/video streaming, subtitles, playback position and MPV integration
 - [ ] ZIP/TAR/TAR.GZ import and optional extraction
 
-## M5 Mobile and TV clients
+## M5 Web, mobile and TV clients
+- [ ] Browser-based web application (React) using a secure shared Go HTTP API; OAuth device authorization, file browsing, upload/download, previews and transfer history
+- [ ] Secure account/device session registry and device authorization/revocation flows
+- [ ] Multi-device session management UI: platform, device label, last active, current-session marker, revoke one/all sessions
+- [ ] Cross-device settings and sync coordination; encrypted-key sharing must be separately designed and reviewed
+- [ ] Android 7+ client
 - [ ] Android 7+ client
 - [ ] iOS/iPadOS client
 - [ ] Android TV / Google TV / Fire TV client
