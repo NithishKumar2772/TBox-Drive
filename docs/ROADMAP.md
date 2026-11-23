@@ -76,7 +76,6 @@
 - [ ] Multi-device session management UI: platform, device label, last active, current-session marker, revoke one/all sessions
 - [ ] Cross-device settings and sync coordination; encrypted-key sharing must be separately designed and reviewed
 - [ ] Android 7+ client
-- [ ] Android 7+ client
 - [ ] iOS/iPadOS client
 - [ ] Android TV / Google TV / Fire TV client
 - [ ] Samsung Tizen TV client
