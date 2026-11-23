@@ -20,13 +20,14 @@ import (
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
+	"github.com/NithishKumar2772/TBox-Drive/internal/virtualdrive"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type AppStatus struct { Ready bool `json:"ready"`; Message string `json:"message"`; ApplicationRoot string `json:"applicationRoot,omitempty"` }
 type FilePage struct { Files []provider.File `json:"files"`; NextPageToken string `json:"nextPageToken,omitempty"` }
-type DesktopApp struct { ctx context.Context; store *sqlite.Store; service *app.TeraBoxService; applicationRoot string; message string }
-func NewDesktopApp()*DesktopApp{return &DesktopApp{message:"Starting TBox Drive…"}}
+type DesktopApp struct { ctx context.Context; store *sqlite.Store; service *app.TeraBoxService; drive *virtualdrive.Manager; applicationRoot string; message string }
+func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),message:"Starting TBox Drive…"}}
 func(d *DesktopApp)startup(ctx context.Context){
 	d.ctx=ctx
 	configDir,err:=os.UserConfigDir();if err!=nil{d.message="Cannot locate the user configuration directory: "+err.Error();return}
@@ -38,8 +39,26 @@ func(d *DesktopApp)startup(ctx context.Context){
 	service,err:=app.NewTeraBoxService(oauth,secrets,store,store,d.applicationRoot);if err!=nil{d.message="Cannot initialize TeraBox service: "+err.Error();return}
 	d.service=service;d.message="TBox Drive is ready."
 }
-func(d *DesktopApp)shutdown(context.Context){if d.store!=nil{_ = d.store.Close()}}
+func(d *DesktopApp)shutdown(context.Context){if d.drive!=nil{d.drive.Unmount()};if d.store!=nil{_ = d.store.Close()}}
 func(d *DesktopApp)GetAppStatus()AppStatus{return AppStatus{Ready:d.service!=nil,Message:d.message,ApplicationRoot:d.applicationRoot}}
+
+func(d *DesktopApp)GetVirtualDriveStatus()virtualdrive.Status{
+	if d.drive==nil{return virtualdrive.Status{Mounted:false,Message:"Virtual drive manager is unavailable."}}
+	return d.drive.GetStatus()
+}
+func(d *DesktopApp)MountVirtualDrive(accountID,mountpoint string)(virtualdrive.Status,error){
+	if err:=d.requireService();err!=nil{return virtualdrive.Status{},err}
+	if d.drive==nil{return virtualdrive.Status{},errors.New("virtual drive manager is unavailable")}
+	if _,err:=d.store.Get(d.ctx,accountID);err!=nil{return virtualdrive.Status{},fmt.Errorf("select a connected TeraBox account: %w",err)}
+	cacheRoot,err:=os.UserCacheDir();if err!=nil{return virtualdrive.Status{},err}
+	cacheDir:=filepath.Join(cacheRoot,"TBox Drive","drive-cache")
+	factory:=func(ctx context.Context)(*terabox.APIClient,error){return d.service.NewAPIClient(ctx,accountID)}
+	return d.drive.Mount(d.ctx,factory,d.applicationRoot,cacheDir,mountpoint)
+}
+func(d *DesktopApp)UnmountVirtualDrive()virtualdrive.Status{
+	if d.drive==nil{return virtualdrive.Status{Mounted:false,Message:"Virtual drive manager is unavailable."}}
+	return d.drive.Unmount()
+}
 func(d *DesktopApp)requireService()error{if d.service==nil{return errors.New(d.message)};return nil}
 func(d *DesktopApp)StartTeraBoxConnect()(terabox.DeviceAuthorization,error){if err:=d.requireService();err!=nil{return terabox.DeviceAuthorization{},err};return d.service.BeginConnect(d.ctx)}
 func(d *DesktopApp)CompleteTeraBoxConnect(device terabox.DeviceAuthorization)(account.Account,error){if err:=d.requireService();err!=nil{return account.Account{},err};return d.service.CompleteConnect(d.ctx,device)}
