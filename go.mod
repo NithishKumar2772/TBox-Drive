@@ -3,8 +3,8 @@ module github.com/NithishKumar2772/TBox-Drive
 go 1.25.0
 
 require (
-	github.com/winfsp/go-winfsp v0.0.0-20261009171518-5c41ad41b7a6
 	github.com/wailsapp/wails/v2 v2.15.0
+	github.com/winfsp/go-winfsp v0.0.0-20261009171518-5c41ad41b7a6
 	github.com/zalando/go-keyring v0.2.6
 	modernc.org/sqlite v1.34.5
 )
