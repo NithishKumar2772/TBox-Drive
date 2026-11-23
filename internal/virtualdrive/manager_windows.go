@@ -245,6 +245,7 @@ type cloudHandle struct {
 	entries []os.FileInfo
 	index int
 	closed bool
+	invalidateCache bool
 	mu sync.Mutex
 }
 
@@ -270,13 +271,17 @@ func (h *cloudHandle) uploadIfDirty() error {
 	api,err:=h.filesystem.apiClient();if err!=nil{return err}
 	if _,err:=api.UploadFile(h.filesystem.ctx,h.file.Name(),h.remotePath,terabox.UploadOptions{});err!=nil{return fmt.Errorf("upload edited virtual-drive file: %w",err)}
 	h.dirty=false
+	h.invalidateCache=true
 	return nil
 }
 func (h *cloudHandle) Close() error {
 	h.mu.Lock();defer h.mu.Unlock()
 	if h.closed{return nil};h.closed=true
 	uploadErr:=h.uploadIfDirty()
-	var closeErr error;if h.file!=nil{closeErr=h.file.Close()}
+	var closeErr error
+	localPath := ""
+	if h.file!=nil { localPath = h.file.Name(); closeErr = h.file.Close() }
+	if h.invalidateCache && localPath != "" { _ = os.Remove(localPath) }
 	if uploadErr!=nil{return uploadErr};return closeErr
 }
 
