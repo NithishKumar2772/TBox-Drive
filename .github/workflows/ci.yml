@@ -53,6 +53,8 @@ jobs:
           node-version: 24
       - name: Build Windows desktop and self-hosted web applications
         run: ./scripts/build-windows.ps1
+      - name: Test Windows virtual-drive implementation
+        run: go test ./internal/virtualdrive
       - uses: actions/upload-artifact@v7
         with:
           name: TBoxDrive-windows-amd64
