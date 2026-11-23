@@ -110,7 +110,7 @@ A successful GitHub Actions run proves only the steps configured in that run. It
 - Rename, move and delete operations where supported by the provider API.
 - Transfer history and appearance selection.
 - Safe cloud move operation from the desktop file explorer.
-- Active upload cancellation with persisted canceled transfer state.
+- Active upload/download cancellation with persisted transfer state and progress reporting.
 - Windows WinFsp virtual-drive prototype.
 
 ### Self-hosted browser client
