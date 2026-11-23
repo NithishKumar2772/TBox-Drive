@@ -39,6 +39,9 @@ type UploadOptions struct {
 	Repository transfer.Repository
 	TransferID string
 	MaxPartAttempts int
+	// MaxParallelParts bounds concurrent multipart requests. Zero keeps the
+	// conservative sequential behaviour; values above four are rejected.
+	MaxParallelParts int
 	RetryDelay time.Duration
 	MaxRetryDelay time.Duration
 }
@@ -61,6 +64,9 @@ func PlanTeraBoxChunks(fileSize,preferredSize int64)([]uploadPart,error){
 
 func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,options UploadOptions)(result provider.UploadResult,err error){
 	if err=c.validateRemotePath(remotePath);err!=nil{return provider.UploadResult{},err}
+	if options.MaxParallelParts < 0 || options.MaxParallelParts > 4 {
+		return provider.UploadResult{}, errors.New("max parallel parts must be between 0 and 4")
+	}
 	chunkSize:=options.ChunkSize;if chunkSize==0{chunkSize=DefaultUploadChunkSize}
 	file,openErr:=os.Open(localPath);if openErr!=nil{return provider.UploadResult{},fmt.Errorf("open upload source: %w",openErr)};defer file.Close()
 	stat,statErr:=file.Stat();if statErr!=nil{return provider.UploadResult{},fmt.Errorf("stat upload source: %w",statErr)}
@@ -109,17 +115,10 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 	for _,part:=range chunks{if _,isMissing:=missingSet[part.Index];!isMissing&&repo!=nil{if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:part.Index,Offset:part.Offset,Size:part.Size,Checksum:blockMD5[part.Index],Status:"completed"});err!=nil{return provider.UploadResult{},fmt.Errorf("persist completed TeraBox part %d: %w",part.Index,err)}}}
 	if repo!=nil{if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},err}}
 	if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
-	for _,index:=range missing{if err=ctx.Err();err!=nil{return provider.UploadResult{},err}
-		part:=chunks[index];got,completedFile,partErr:=c.uploadPartWithRecovery(ctx,file,remotePath,pre.UploadID,part,blockMD5[index],string(blockJSON),len(chunks),options);if partErr!=nil{return provider.UploadResult{},fmt.Errorf("upload part %d: %w",index,partErr)}
-		if completedFile!=nil{result.File=*completedFile;transferred=stat.Size();if repo!=nil{for _,done:=range chunks{if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:done.Index,Offset:done.Offset,Size:done.Size,Checksum:blockMD5[done.Index],Status:"completed"});err!=nil{return provider.UploadResult{},err}}};return result,nil}
-		if !strings.EqualFold(got,blockMD5[index]){return provider.UploadResult{},fmt.Errorf("TeraBox part %d checksum mismatch",index)}
-		transferred+=part.Size
-		if repo!=nil{
-			if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:index,Offset:part.Offset,Size:part.Size,Checksum:got,RemotePartID:strconv.Itoa(index),Status:"completed"});err!=nil{return provider.UploadResult{},fmt.Errorf("persist TeraBox part %d: %w",index,err)}
-			if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},fmt.Errorf("persist TeraBox progress: %w",err)}
-		}
-		if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
-	}
+	var completedFile *provider.File
+	transferred,completedFile,err=c.uploadMissingParts(ctx,file,remotePath,pre.UploadID,chunks,blockMD5,string(blockJSON),missing,stat.Size(),transferred,repo,taskID,options)
+	if err!=nil{return provider.UploadResult{},err}
+	if completedFile!=nil{result.File=*completedFile;return result,nil}
 	if err=ensureUploadSourceUnchanged(localPath,file,stat);err!=nil{return provider.UploadResult{},err}
 	if repo!=nil{if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusFinalizing,"");err!=nil{return provider.UploadResult{},err}}
 	rtype:=1;if options.RenamePolicy!=nil{rtype=*options.RenamePolicy}
