@@ -14,7 +14,8 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 
 ## Desktop experience
 - Windows 10/11, macOS Intel/Apple Silicon, and Linux.
-- Native virtual drive and file-manager integration are target capabilities, not yet implemented.
+- A Windows WinFsp-backed virtual-drive prototype is implemented: it lists remote content, hydrates whole files into a local cache on open, and uploads edits on flush/close. It is not yet byte-range streaming or a full offline-sync engine.
+- macOS Finder/File Provider and Linux file-manager integrations remain target capabilities, not yet implemented.
 - Windows target: File Explorer integration, online-only files, on-demand hydration, offline pinning, cache management, status icons, context actions, drag/drop, search, sort, properties and reconnect.
 - macOS target: Finder/File Provider integration.
 - Linux target: file-manager integration through an appropriate mount provider such as FUSE.
@@ -28,7 +29,7 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - File/folder drag-and-drop and native OS integration are planned.
 
 ## Storage modes and synchronization
-- Streaming: list remote metadata and retrieve content on demand.
+- Streaming: list remote metadata and retrieve content on demand. The current Windows prototype hydrates whole files on demand; byte-range streaming is not yet implemented.
 - Mirroring: maintain local copies and synchronize changes.
 - Hybrid: per-folder/per-file streaming, mirroring and offline pinning.
 - Two-way sync with change detection, conflict handling, retry queue, offline journal, version-aware reconciliation and safe deletion semantics.
