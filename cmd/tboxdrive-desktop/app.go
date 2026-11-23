@@ -209,10 +209,10 @@ func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,task
 	defer func(){
 		cancel()
 		d.transferMu.Lock();delete(d.transferCancels,taskID);d.transferMu.Unlock()
-		d.transferWG.Done()
 		status:=transfer.StatusFailed;message:="download failed"
 		if retErr==nil{status=transfer.StatusCompleted;transferred=size;message=""}else if errors.Is(retErr,context.Canceled){status=transfer.StatusCanceled;message="download canceled"}
 		if d.store!=nil{_ = d.store.UpdateProgress(context.Background(),taskID,transferred,status,message)}
+		d.transferWG.Done()
 	}()
 	task:=transfer.Task{ID:taskID,ProviderID:"terabox",Direction:"download",Source:fileID,Destination:destination,Size:size,Status:transfer.StatusQueued}
 	if err:=d.store.CreateTransfer(transferCtx,task);err!=nil{return "",fmt.Errorf("create download transfer record: %w",err)}
