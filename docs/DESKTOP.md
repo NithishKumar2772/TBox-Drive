@@ -46,7 +46,7 @@ User access and refresh tokens are stored in the OS credential vault. SQLite sto
 - Profile dropdown and settings screen
 - Configurable automatic current-folder and transfer-list refresh (30-second interval)
 - Automatic GitHub latest-release check preference and manual check
-- Upload throughput and estimated-time-remaining display
+- Upload throughput and estimated-time-remaining display\n- TeraBox multipart upload already divides large files into internal 8 MiB parts and finalizes them as one cloud file; files over 4 GiB still need real-account acceptance testing.
 - Windows virtual-drive mount/unmount controls
 
 ## Profile, settings and transfer monitoring
@@ -55,7 +55,7 @@ The top-right profile menu provides access to account information, settings, sig
 
 The release checker reads the latest public GitHub release metadata. It does not silently download or install updates; users open the release page to review and install a release.
 
-Per-file password encryption, password hints, change-password and recovery-key flows are specified in `docs/PRODUCT_SPECIFICATION.md`, but are not enabled in this build. Do not use the current app to assume files are encrypted.
+The application-vault session unlock model, per-file encryption, lock indicators, password hints, change-password and recovery-key flows are specified in `docs/PRODUCT_SPECIFICATION.md`, but are not enabled in this build. The intended behaviour is one vault unlock per app session, then no repeated password prompt for each encrypted file; closing/reopening the app requires unlocking again. Do not use the current app to assume files are encrypted.
 
 ## Windows virtual-drive prototype
 
@@ -75,3 +75,7 @@ Limitations:
 - Test with non-critical files first; live TeraBox integration has not yet been validated with the user's account.
 
 Folder-tree upload, robust offline sync/conflict resolution, pinning, cache eviction controls and background reconnect remain in development.
+
+## Windows File Explorer roadmap
+
+Planned Explorer improvements include status overlays, right-click actions, drag-and-drop upload/download, offline pinning, free-up-space, file properties, thumbnails/previews, notifications, conflict prompts and Cloud Files API placeholder support. These are roadmap items, not current capabilities. The existing WinFsp prototype provides the mounted drive and basic remote file operations only.
