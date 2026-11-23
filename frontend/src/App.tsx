@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type AppStatus = { ready: boolean; message: string; applicationRoot?: string };
 type Account = { id: string; providerID: string; displayName: string; credentialRef: string };
@@ -9,6 +9,8 @@ type Quota = { total: number; used: number };
 type Transfer = { id: string; provider_id: string; direction: string; source: string; destination: string; size: number; transferred: number; status: string; error?: string };
 type UploadResult = { taskID: string; file: CloudFile };
 type DriveStatus = { mounted: boolean; mountpoint?: string; provider?: string; mode?: string; message: string };
+type UpdateInfo = { latestVersion: string; releaseURL: string; publishedAt?: string; checkedAt: string };
+type TransferProgress = { transferred: number; total: number; speedBps: number; etaSeconds: number | null };
 
 declare global {
   interface Window {
@@ -31,6 +33,7 @@ declare global {
       GetVirtualDriveStatus: () => Promise<DriveStatus>;
       MountVirtualDrive: (accountID: string, mountpoint: string) => Promise<DriveStatus>;
       UnmountVirtualDrive: () => Promise<DriveStatus>;
+      CheckForUpdates: () => Promise<UpdateInfo>;
     } } };
     runtime?: { EventsOn: (event: string, callback: (payload: { transferId: string; transferred: number; total: number }) => void) => (() => void) };
   }
@@ -55,8 +58,14 @@ export default function App() {
   const [device, setDevice] = useState<DeviceAuthorization | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ transferred: number; total: number } | null>(null);
-  const [activeView, setActiveView] = useState<"home" | "files" | "pictures" | "documents" | "archives" | "videos" | "music" | "transfers" | "drive">("home");
+  const [progress, setProgress] = useState<TransferProgress | null>(null);
+  const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(() => window.localStorage.getItem("tbox-auto-refresh") !== "false");
+  const [autoUpdateCheck, setAutoUpdateCheck] = useState(() => window.localStorage.getItem("tbox-auto-update-check") !== "false");
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [activeView, setActiveView] = useState<"home" | "files" | "pictures" | "documents" | "archives" | "videos" | "music" | "transfers" | "drive" | "settings">("home");
   const [driveStatus, setDriveStatus] = useState<DriveStatus>({ mounted: false, message: "Virtual drive is not mounted." });
   const [driveLetter, setDriveLetter] = useState("T:");
   const [searchTerm, setSearchTerm] = useState("");
@@ -115,7 +124,16 @@ export default function App() {
       setAccounts(list);
       if (list.length) setAccountID(list[0].id);
     }).catch(e => setMessage(String(e)));
-    const off = window.runtime?.EventsOn("transfer-progress", payload => setProgress({ transferred: payload.transferred, total: payload.total }));
+    if (window.localStorage.getItem("tbox-auto-update-check") !== "false") { void api.CheckForUpdates().then(setUpdateInfo).catch(() => undefined); }\n    const off = window.runtime?.EventsOn("transfer-progress", payload => {
+      const now = Date.now();
+      const previous = lastProgress.current;
+      const elapsed = previous && previous.id === payload.transferId ? Math.max(0.001, (now - previous.at) / 1000) : 0;
+      const delta = previous && previous.id === payload.transferId ? Math.max(0, payload.transferred - previous.transferred) : 0;
+      const speedBps = elapsed > 0 ? delta / elapsed : 0;
+      const remaining = Math.max(0, payload.total - payload.transferred);
+      setProgress({ transferred: payload.transferred, total: payload.total, speedBps, etaSeconds: speedBps > 0 ? remaining / speedBps : null });
+      lastProgress.current = { id: payload.transferId, transferred: payload.transferred, at: now };
+    });
     return () => off?.();
   }, []);
 
@@ -132,6 +150,24 @@ export default function App() {
     return () => media.removeEventListener("change", applyTheme);
   }, [theme]);
   useEffect(() => { if (activeView === "transfers") refreshTransfers(); }, [activeView, refreshTransfers]);
+  useEffect(() => {
+    window.localStorage.setItem("tbox-auto-refresh", String(autoRefresh));
+    if (!autoRefresh || !accountID) return;
+    const handle = window.setInterval(() => { void refreshFiles(accountID, currentPath); void refreshTransfers(); }, 30000);
+    return () => window.clearInterval(handle);
+  }, [autoRefresh, accountID, currentPath, refreshFiles, refreshTransfers]);
+  useEffect(() => { window.localStorage.setItem("tbox-auto-update-check", String(autoUpdateCheck)); }, [autoUpdateCheck]);
+
+  const checkForUpdates = async () => {
+    const api = desktop();
+    if (!api) return;
+    setUpdateMessage("Checking GitHub releases…");
+    try {
+      const info = await api.CheckForUpdates();
+      setUpdateInfo(info);
+      setUpdateMessage(`Latest published release: ${info.latestVersion}`);
+    } catch (error) { setUpdateMessage(`Update check failed: ${String(error)}`); }
+  };
 
   const mountDrive = async () => {
     const api = desktop();
@@ -288,11 +324,20 @@ export default function App() {
 
       <section className="content">
         <header>
-          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{({home:"Home",files:"My Files",pictures:"Pictures",documents:"Documents",archives:"ZIP",videos:"Videos",music:"Music",transfers:"Transfers",drive:"Virtual Drive"} as Record<string,string>)[activeView]}</h1></div>
+          <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{({home:"Home",files:"My Files",pictures:"Pictures",documents:"Documents",archives:"ZIP",videos:"Videos",music:"Music",transfers:"Transfers",drive:"Virtual Drive",settings:"Settings"} as Record<string,string>)[activeView]}</h1></div>
           <div className="header-actions">
             {accountID && !["transfers", "drive"].includes(activeView) && <button onClick={upload} disabled={busy}>Upload files</button>}
             <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
             {!accounts.length && <button onClick={connect} disabled={busy || !status?.ready}>Connect TeraBox</button>}
+            <div className="profile-menu">
+              <button className="profile-trigger secondary" onClick={() => setProfileOpen(value => !value)} aria-expanded={profileOpen} aria-label="Profile and settings"><span className="profile-avatar">{(accounts.find(a => a.id === accountID)?.displayName || "T").slice(0,1).toUpperCase()}</span><span>Profile</span><span>▾</span></button>
+              {profileOpen && <div className="profile-dropdown">
+                <div className="profile-summary"><strong>{accounts.find(a => a.id === accountID)?.displayName || "TBox Drive"}</strong><small>{accounts.length ? "Connected TeraBox account" : "No account connected"}</small></div>
+                <button onClick={() => { setActiveView("settings"); setProfileOpen(false); }}>Settings & security</button>
+                <button onClick={() => { void checkForUpdates(); setProfileOpen(false); }}>Check for updates</button>
+                {accountID && <button className="danger-text" onClick={() => { void disconnect(); setProfileOpen(false); }}>Disconnect account</button>}
+              </div>}
+            </div>
           </div>
         </header>
 
@@ -306,7 +351,7 @@ export default function App() {
           {qrSource && <img className="qr" src={qrSource} alt="TeraBox authorization QR code" />}
         </div>}
 
-        {!["transfers", "drive"].includes(activeView) && <>
+        {!["transfers", "drive", "settings"].includes(activeView) && <>
           <div className="cards">
             <article><p>Connected accounts</p><strong>{accounts.length}</strong><small>TeraBox cloud accounts</small></article>
             <article><p>Cloud storage used</p><strong>{quota ? formatBytes(quota.used) : "—"}</strong><small>{quota ? `of ${formatBytes(quota.total)} total` : "Connect an account to view quota"}</small></article>
@@ -343,6 +388,33 @@ export default function App() {
           </article>
         </>}
 
+         {activeView === "settings" && <div className="settings-layout">
+          <article className="panel settings-panel">
+            <p className="eyebrow">ACCOUNT</p><h2>Profile and account</h2>
+            <div className="settings-row"><div><strong>Connected account</strong><small>{accounts.find(a => a.id === accountID)?.displayName || "No TeraBox account connected"}</small></div><span className="status-muted">{accounts.length ? "Connected" : "Not connected"}</span></div>
+            <div className="settings-row"><div><strong>Storage provider</strong><small>TeraBox only</small></div></div>
+          </article>
+          <article className="panel settings-panel">
+            <p className="eyebrow">GENERAL</p><h2>Application preferences</h2>
+            <label className="settings-row setting-toggle"><span><strong>Automatically refresh files</strong><small>Refresh the current folder and transfer list every 30 seconds</small></span><input type="checkbox" checked={autoRefresh} onChange={event => setAutoRefresh(event.target.checked)} /></label>
+            <label className="settings-row setting-toggle"><span><strong>Automatically check for updates</strong><small>Check the latest TBox Drive GitHub release when the app starts</small></span><input type="checkbox" checked={autoUpdateCheck} onChange={event => setAutoUpdateCheck(event.target.checked)} /></label>
+            <div className="settings-row"><div><strong>Appearance</strong><small>Light, dark or system theme</small></div><select value={theme} onChange={event => setTheme(event.target.value as "system" | "light" | "dark")}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+          </article>
+          <article className="panel settings-panel">
+            <p className="eyebrow">SECURITY</p><h2>Encryption and password protection</h2>
+            <div className="security-callout"><strong>Per-file encryption</strong><span>Planned: choose encryption on each upload, set a file password and optional hint, then enter the password when opening the file.</span></div>
+            <div className="settings-row"><div><strong>Change encryption password</strong><small>Re-protect file keys without re-uploading the entire file</small></div><badge className="not-available">Not available yet</badge></div>
+            <div className="settings-row"><div><strong>Forgot password / recovery key</strong><small>Recover encrypted files using a separately saved recovery key</small></div><badge className="not-available">Not available yet</badge></div>
+            <div className="security-note">Encryption is not active in this build. Existing uploads are not encrypted by TBox Drive. The password and recovery workflow will be enabled only after the local encryption engine and recovery tests are complete.</div>
+          </article>
+          <article className="panel settings-panel">
+            <p className="eyebrow">UPDATES</p><h2>Application updates</h2>
+            <div className="settings-row"><div><strong>Latest release</strong><small>{updateInfo ? updateInfo.latestVersion : "Not checked yet"}</small></div><button className="secondary" onClick={checkForUpdates}>Check now</button></div>
+            {updateInfo && <p className="update-link"><a href={updateInfo.releaseURL} target="_blank" rel="noreferrer">Open release notes and downloads</a></p>}
+            {updateMessage && <p className="muted">{updateMessage}</p>}
+          </article>
+        </div>}
+
         {activeView === "drive" && <article className="panel drive-panel">
           <div className="panel-head">
             <div><p className="eyebrow">WINDOWS FILE EXPLORER INTEGRATION</p><h2>TeraBox Virtual Drive</h2></div>
@@ -376,7 +448,7 @@ export default function App() {
               <span>{t.direction}</span>
             </div>)}
           </div> : <div className="empty"><div className="empty-icon">⇅</div><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
-          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
+          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? `${Math.ceil(progress.etaSeconds)} sec` : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
         </article>}
       </section>
     </main>
