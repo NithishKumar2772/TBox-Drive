@@ -36,7 +36,7 @@ func TestTeraBoxConnectStoresSecretsOutsideDatabase(t *testing.T){
 	device,err:=service.BeginConnect(context.Background());if err!=nil{t.Fatal(err)}
 	account,err:=service.CompleteConnect(context.Background(),device);if err!=nil{t.Fatal(err)}
 	if account.ID!="terabox:42"||account.CredentialRef!="terabox:42"{t.Fatalf("account %#v",account)}
-	if _,err:=service.NewAPIClient(context.Background(),account.ID);err!=nil{t.Fatal(err)}
+	if _,err:=service.NewAPIClient(context.Background(),account.ID);err==nil{t.Fatal("expected production API client to reject loopback token-info domains")}
 	stored,err:=secrets.Get(context.Background(),"terabox:42");if err!=nil{t.Fatal(err)}
 	var credential storedTeraBoxCredential;if err:=json.Unmarshal(stored,&credential);err!=nil{t.Fatal(err)}
 	if credential.Token.AccessToken!="access-secret"{t.Fatal("access token not stored in secret store")}
