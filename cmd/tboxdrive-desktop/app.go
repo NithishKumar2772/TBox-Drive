@@ -51,8 +51,10 @@ type DesktopApp struct {
 	message string
 	driveMu sync.Mutex
 	mountedAccountID string
+	transferMu sync.Mutex
+	transferCancels map[string]context.CancelFunc
 }
-func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),message:"Starting TBox Drive…"}}
+func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),transferCancels:make(map[string]context.CancelFunc),message:"Starting TBox Drive…"}}
 func(d *DesktopApp)startup(ctx context.Context){
 	d.ctx=ctx
 	configDir,err:=os.UserConfigDir();if err!=nil{d.message="Cannot locate the user configuration directory: "+err.Error();return}
@@ -65,6 +67,10 @@ func(d *DesktopApp)startup(ctx context.Context){
 	d.service=service;d.message="TBox Drive is ready."
 }
 func(d *DesktopApp)shutdown(context.Context){
+	d.transferMu.Lock()
+	for _, cancel := range d.transferCancels { cancel() }
+	d.transferCancels = make(map[string]context.CancelFunc)
+	d.transferMu.Unlock()
 	d.driveMu.Lock()
 	if d.drive!=nil{d.drive.Unmount()}
 	d.mountedAccountID=""
@@ -123,11 +129,43 @@ func(d *DesktopApp)GetStorageQuota(accountID string)(terabox.Quota,error){if err
 func(d *DesktopApp)SelectUploadFile()(string,error){return runtime.OpenFileDialog(d.ctx,runtime.OpenDialogOptions{Title:"Select a file to upload"})}
 func(d *DesktopApp)SelectUploadFiles()([]string,error){return runtime.OpenMultipleFilesDialog(d.ctx,runtime.OpenDialogOptions{Title:"Select files to upload"})}
 func(d *DesktopApp)UploadFile(accountID,localPath,parentPath,name,taskID string)(provider.UploadResult,error){
-	if err:=d.requireService();err!=nil{return provider.UploadResult{},err};if localPath==""{return provider.UploadResult{},errors.New("select a local file first")}
-	if name==""{name=path.Base(localPath)};if name=="."||name=="/"||name==".."||strings.ContainsAny(name,"/\\"){return provider.UploadResult{},errors.New("file name must not contain path separators")}
+	if err:=d.requireService();err!=nil{return provider.UploadResult{},err}
+	if localPath==""{return provider.UploadResult{},errors.New("select a local file first")}
+	if name==""{name=path.Base(localPath)}
+	if name=="."||name=="/"||name==".."||strings.ContainsAny(name,"/\\"){return provider.UploadResult{},errors.New("file name must not contain path separators")}
 	if taskID==""{var id [16]byte;if _,err:=rand.Read(id[:]);err!=nil{return provider.UploadResult{},err};taskID="tbox-"+hex.EncodeToString(id[:])}
-	if parentPath==""{parentPath=d.applicationRoot};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return provider.UploadResult{},err}
-	return api.UploadFile(d.ctx,localPath,path.Join(parentPath,name),terabox.UploadOptions{Repository:d.store,TransferID:taskID,OnProgress:func(done,total int64){runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":done,"total":total})}})
+	if parentPath==""{parentPath=d.applicationRoot}
+	transferCtx,cancel:=context.WithCancel(d.ctx)
+	d.transferMu.Lock()
+	if d.transferCancels==nil { d.transferCancels=make(map[string]context.CancelFunc) }
+	if _,exists:=d.transferCancels[taskID];exists {
+		d.transferMu.Unlock()
+		cancel()
+		return provider.UploadResult{},errors.New("transfer ID is already active")
+	}
+	d.transferCancels[taskID]=cancel
+	d.transferMu.Unlock()
+	defer func(){
+		cancel()
+		d.transferMu.Lock()
+		delete(d.transferCancels,taskID)
+		d.transferMu.Unlock()
+	}()
+	api,err:=d.service.NewAPIClient(transferCtx,accountID);if err!=nil{return provider.UploadResult{},err}
+	return api.UploadFile(transferCtx,localPath,path.Join(parentPath,name),terabox.UploadOptions{Repository:d.store,TransferID:taskID,OnProgress:func(done,total int64){
+		runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":done,"total":total})
+	}})
+}
+
+func(d *DesktopApp)CancelTransfer(taskID string)error{
+	taskID=strings.TrimSpace(taskID)
+	if taskID==""{return errors.New("transfer ID is required")}
+	d.transferMu.Lock()
+	cancel,ok:=d.transferCancels[taskID]
+	d.transferMu.Unlock()
+	if !ok{return errors.New("transfer is not active")}
+	cancel()
+	return nil
 }
 func(d *DesktopApp)RenameFile(accountID,remotePath,newName string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.Rename(d.ctx,remotePath,newName)}
 func(d *DesktopApp)DeleteFile(accountID,remotePath string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.DeletePath(d.ctx,remotePath)}
