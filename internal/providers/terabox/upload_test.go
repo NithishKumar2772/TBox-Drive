@@ -13,11 +13,26 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
+
+func TestUploadFileRejectsUnsafeParallelPartCount(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	api, err := newTestAPI(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = api.UploadFile(context.Background(), "does-not-need-to-exist", "/From: Other Applications/TBox-Drive-123/file.bin", UploadOptions{MaxParallelParts: 5})
+	if err == nil || !strings.Contains(err.Error(), "between 0 and 4") {
+		t.Fatalf("expected bounded concurrency validation error, got %v", err)
+	}
+}
 
 func TestPlanTeraBoxChunks(t *testing.T){
 	chunks,err:=PlanTeraBoxChunks(10<<20,8<<20);if err!=nil{t.Fatal(err)}
@@ -47,6 +62,8 @@ func TestPlanTeraBoxChunksRejectsEmpty(t *testing.T){if _,err:=PlanTeraBoxChunks
 
 func TestUploadFilePersistsTransferAndParts(t *testing.T){
 	var mu sync.Mutex
+	var activeParts int32
+	var maxActiveParts int32
 	uploaded:=map[int]string{}
 	var blockList string
 	server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
@@ -57,6 +74,13 @@ func TestUploadFilePersistsTransferAndParts(t *testing.T){
 			blockList=r.Form.Get("block_list")
 			fmt.Fprint(w,`{"errno":0,"uploadid":"upload-123","return_type":1,"block_list":[0,1]}`)
 		case "/rest/2.0/pcs/superfile2":
+			active := atomic.AddInt32(&activeParts, 1)
+			for {
+				previous := atomic.LoadInt32(&maxActiveParts)
+				if active <= previous || atomic.CompareAndSwapInt32(&maxActiveParts, previous, active) { break }
+			}
+			defer atomic.AddInt32(&activeParts, -1)
+			time.Sleep(30 * time.Millisecond)
 			part,_:=strconv.Atoi(r.URL.Query().Get("partseq"))
 			if r.URL.Query().Get("method")!="upload"||r.URL.Query().Get("uploadid")!="upload-123"{t.Errorf("bad upload query: %v",r.URL.Query())}
 			f,_,err:=r.FormFile("file");if err!=nil{t.Error(err);http.Error(w,"bad multipart",400);return}
@@ -77,11 +101,12 @@ func TestUploadFilePersistsTransferAndParts(t *testing.T){
 	api, err := newAPIClientWithTestDomains(APIConfig{AccessToken: "test", TokenInfo: TokenInfo{APIDomain: server.URL, UploadDomain: server.URL}, ApplicationRoot: "/From: Other Applications/TBox-Drive-123", HTTPClient: server.Client()});if err!=nil{t.Fatal(err)}
 	store,err:=sqlite.Open(":memory:");if err!=nil{t.Fatal(err)};defer store.Close()
 	var progress int64
-	result,err:=api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/big.bin",UploadOptions{ChunkSize:8<<20,OnProgress:func(n,total int64){progress=n},Repository:store,TransferID:"task-upload-1"})
+	result,err:=api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/big.bin",UploadOptions{ChunkSize:8<<20,OnProgress:func(n,total int64){progress=n},Repository:store,TransferID:"task-upload-1",MaxParallelParts:2})
 	if err!=nil{t.Fatal(err)}
 	if result.TaskID!="task-upload-1"{t.Fatalf("task ID %q",result.TaskID)}
 	if result.File.ID!="987"||result.File.Name!="big.bin"||result.File.Size!=10<<20{t.Fatalf("unexpected result: %#v",result.File)}
 	if len(uploaded)!=2||progress!=10<<20{t.Fatalf("uploaded=%v progress=%d",uploaded,progress)}
+	if got:=atomic.LoadInt32(&maxActiveParts);got<2{t.Fatalf("expected two concurrent part uploads, observed maximum %d",got)}
 	if !strings.HasPrefix(blockList,"[")||!strings.HasSuffix(blockList,"]"){t.Fatalf("invalid block list %q",blockList)}
 	task,err:=store.GetTransfer(context.Background(),"task-upload-1");if err!=nil{t.Fatal(err)}
 	if task.Status!=transfer.StatusCompleted||task.Transferred!=10<<20{t.Fatalf("persisted task: %#v",task)}

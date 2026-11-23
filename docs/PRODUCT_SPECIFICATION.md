@@ -91,7 +91,24 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - MPV integration on supported desktop systems for formats unsupported by the system webview.
 - Mobile playback gestures and TV remote navigation are platform-specific follow-up milestones.
 
+## Web application
+- Provide a responsive browser client for supported current versions of Chrome, Edge, Firefox and Safari.
+- Use the shared Go application services through an authenticated HTTPS API; do not reimplement provider authentication, multipart upload or transfer recovery in browser-only code.
+- Support official TeraBox OAuth/device authorization, file and folder browsing, upload/download, transfer status/history, supported previews and account settings.
+- Use short-lived application sessions, secure cookie/session handling, CSRF protection where cookie authentication is used, strict origin/CORS policy, rate limits and redacted audit logs.
+- Never expose TeraBox client secrets or long-lived provider refresh tokens to browser JavaScript.
+- Browser uploads must be resumable and bounded; validate size, MIME metadata and paths server-side and never trust client-provided checksums without verification.
+
+## Device and session management
+- Maintain a server-side registry of authorized TBox Drive device sessions, with opaque random session identifiers and hashed/revocable credentials.
+- Show device label, platform, last active time and current-session indicator; do not collect unnecessary hardware fingerprints.
+- Allow revoking one device or all other sessions, with immediate token/session invalidation where the backend controls the session.
+- Require fresh authorization for sensitive device changes and show clear confirmation for revoke-all.
+- Keep provider account sessions separate from local device identity. Do not claim that TeraBox itself supports TBox Drive device revocation.
+- Cross-device sync and encrypted-file key sharing require separate threat modelling and explicit user-controlled enrollment; never upload vault passwords or plaintext encryption keys.
+
 ## Platforms
+- Browser web client (Chrome, Edge, Firefox and Safari).
 - Windows 10/11.
 - macOS Intel and Apple Silicon.
 - Linux (x86_64 first; ARM64 where feasible).

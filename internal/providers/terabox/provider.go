@@ -31,7 +31,7 @@ func (a *Adapter) Upload(ctx context.Context,req provider.UploadRequest)(provide
 	name:=req.Name;if name==""{name=path.Base(strings.ReplaceAll(req.LocalPath,"\\","/"))}
 	if name=="."||name=="/"||name==".."||strings.ContainsAny(name,"/\\"){return provider.UploadResult{},errors.New("upload name must be a single safe filename")}
 	parent:=req.ParentID;if parent==""{parent=a.api.applicationRoot}
-	return a.api.UploadFile(ctx,req.LocalPath,path.Join(parent,name),UploadOptions{Repository:a.repository,TransferID:req.TaskID})
+	return a.api.UploadFile(ctx,req.LocalPath,path.Join(parent,name),UploadOptions{Repository:a.repository,TransferID:req.TaskID,MaxParallelParts:2})
 }
 func (a *Adapter) Download(ctx context.Context,fileID string)(io.ReadCloser,error){if a.api==nil{return nil,ErrNotImplemented};return a.api.Download(ctx,fileID)}
 func (*Adapter) Delete(context.Context,string)error{return ErrNotImplemented}
