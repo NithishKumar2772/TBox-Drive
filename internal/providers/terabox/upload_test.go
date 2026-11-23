@@ -26,6 +26,23 @@ func TestPlanTeraBoxChunks(t *testing.T){
 	if total!=10<<20{t.Fatalf("got total %d",total)}
 }
 func TestPlanTeraBoxChunksAvoidsSmallTail(t *testing.T){chunks,err:=PlanTeraBoxChunks((8<<20)+1,8<<20);if err!=nil{t.Fatal(err)};if len(chunks)!=1||chunks[0].Size!=(8<<20)+1{t.Fatalf("unexpected chunks: %#v",chunks)}}
+func TestPlanTeraBoxChunksAboveFourGiBStaysOneLogicalFile(t *testing.T) {
+	const size := int64(4<<30) + (37 << 20) + 123
+	chunks, err := PlanTeraBoxChunks(size, DefaultUploadChunkSize)
+	if err != nil { t.Fatal(err) }
+	if len(chunks) < 2 { t.Fatalf("expected automatic multipart upload for >4 GiB, got %d part(s)", len(chunks)) }
+	var offset int64
+	for i, part := range chunks {
+		if part.Index != i { t.Fatalf("part %d has index %d", i, part.Index) }
+		if part.Offset != offset { t.Fatalf("part %d starts at %d, want contiguous offset %d", i, part.Offset, offset) }
+		if part.Size <= minMultiPartSize { t.Fatalf("part %d is below TeraBox multipart minimum: %d", i, part.Size) }
+		offset += part.Size
+	}
+	if offset != size { t.Fatalf("parts cover %d bytes, want %d", offset, size) }
+	// UploadFile sends one block list to precreate and one final create call,
+	// so these internal parts are assembled as one remote file.
+}
+
 func TestPlanTeraBoxChunksRejectsEmpty(t *testing.T){if _,err:=PlanTeraBoxChunks(0,8<<20);err==nil{t.Fatal("expected empty file rejection")}}
 
 func TestUploadFilePersistsTransferAndParts(t *testing.T){
