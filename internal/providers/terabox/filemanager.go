@@ -53,6 +53,7 @@ func (c *APIClient) Move(ctx context.Context, remotePath, destinationDir, newNam
 
 func (c *APIClient) Copy(ctx context.Context, remotePath, destinationDir, newName string) error {
 	if err := c.validateRemotePath(remotePath); err != nil { return err }
+	if c.isApplicationRoot(remotePath) { return errors.New("refusing to copy the TeraBox application root") }
 	if err := c.validateRemotePath(destinationDir); err != nil { return err }
 	if newName != "" {
 		if err := validateCloudName(newName); err != nil { return err }
@@ -67,7 +68,7 @@ func (c *APIClient) isApplicationRoot(remotePath string) bool {
 
 func validateCloudName(name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00\r\n") {
 		return errors.New("name must be a non-empty filename without path separators")
 	}
 	return nil

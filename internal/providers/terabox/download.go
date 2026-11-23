@@ -42,9 +42,16 @@ func(c *APIClient)isTrustedDownloadURL(u *url.URL)bool{
 // The request context controls the lifetime so large files are not cut off
 // by a fixed whole-response timeout.
 func(c *APIClient)Download(ctx context.Context,fileID string)(io.ReadCloser,error){
-	link,err:=c.DownloadURL(ctx,fileID);if err!=nil{return nil,err}
-	req,err:=http.NewRequestWithContext(ctx,http.MethodGet,link,nil);if err!=nil{return nil,err}
-	resp,err:=c.downloadHTTP.Do(req);if err!=nil{return nil,fmt.Errorf("TeraBox download request failed: %w",err)}
-	if resp.StatusCode<200||resp.StatusCode>=300{resp.Body.Close();return nil,fmt.Errorf("TeraBox download returned HTTP %d",resp.StatusCode)}
-	return resp.Body,nil
+	body,_,err:=c.DownloadWithSize(ctx,fileID)
+	return body,err
+}
+
+// DownloadWithSize returns a streaming response body and the provider's
+// Content-Length when available. A negative size means the server omitted it.
+func(c *APIClient)DownloadWithSize(ctx context.Context,fileID string)(io.ReadCloser,int64,error){
+	link,err:=c.DownloadURL(ctx,fileID);if err!=nil{return nil,0,err}
+	req,err:=http.NewRequestWithContext(ctx,http.MethodGet,link,nil);if err!=nil{return nil,0,err}
+	resp,err:=c.downloadHTTP.Do(req);if err!=nil{return nil,0,fmt.Errorf("TeraBox download request failed: %w",err)}
+	if resp.StatusCode<200||resp.StatusCode>=300{resp.Body.Close();return nil,0,fmt.Errorf("TeraBox download returned HTTP %d",resp.StatusCode)}
+	return resp.Body,resp.ContentLength,nil
 }

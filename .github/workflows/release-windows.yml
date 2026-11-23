@@ -52,7 +52,7 @@ jobs:
           node-version: 24
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Audit frontend dependencies
         working-directory: frontend
         run: npm audit --audit-level=high
@@ -77,6 +77,10 @@ jobs:
       - name: Build desktop and self-hosted Web
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Test Windows virtual-drive implementation
+        run: go test ./internal/virtualdrive
+      - name: Test Windows desktop application code
+        run: go test -tags desktop ./cmd/tboxdrive-desktop
       - name: Package portable Windows x64 archive
         shell: pwsh
         run: |

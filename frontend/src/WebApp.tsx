@@ -30,6 +30,8 @@ export default function WebApp() {
   const [accountID, setAccountID] = useState("");
   const [root, setRoot] = useState("");
   const [files, setFiles] = useState<CloudFile[]>([]);
+  const [nextPageToken, setNextPageToken] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; loaded: number; total: number; stage: string } | null>(null);
   const [currentPath, setCurrentPath] = useState("");
   const [quota, setQuota] = useState<Quota | null>(null);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -40,6 +42,8 @@ export default function WebApp() {
   const [view, setView] = useState<"files" | "transfers" | "settings">("files");
   const fileInput = useRef<HTMLInputElement>(null);
   const connectAbort = useRef<AbortController | null>(null);
+  const uploadRequest = useRef<XMLHttpRequest | null>(null);
+  const fileRequestGeneration = useRef(0);
 
   const refreshAccounts = useCallback(async () => {
     const result = await api<Account[]>("/api/accounts");
@@ -47,13 +51,39 @@ export default function WebApp() {
     setAccountID(current => current && result.some(item => item.id === current) ? current : result[0]?.id ?? "");
   }, []);
   const refreshFiles = useCallback(async (id = accountID, folder = currentPath) => {
-    if (!id) { setFiles([]); setQuota(null); return; }
-    const query = new URLSearchParams({ account_id: id, path: folder || root });
+    const generation = ++fileRequestGeneration.current;
+    if (!id) { setFiles([]); setNextPageToken(""); setQuota(null); return; }
+    const query = new URLSearchParams({ account_id: id, path: folder || root, page: "1" });
     const [page, storage] = await Promise.all([api<FilePage>(`/api/files?${query}`), api<Quota>(`/api/quota?account_id=${encodeURIComponent(id)}`)]);
+    if (generation !== fileRequestGeneration.current) return;
     setFiles(page.files || []);
+    setNextPageToken(page.nextPageToken || "");
     setQuota(storage);
   }, [accountID, currentPath, root]);
   const refreshTransfers = useCallback(async () => setTransfers(await api<Transfer[]>("/api/transfers")), []);
+
+  const loadMoreFiles = async () => {
+    if (!accountID || !nextPageToken || busy) return;
+    const generation = fileRequestGeneration.current;
+    const requestedAccount = accountID;
+    const requestedPath = currentPath;
+    const requestedToken = nextPageToken;
+    setBusy(true);
+    try {
+      const query = new URLSearchParams({ account_id: requestedAccount, path: requestedPath || root, page: requestedToken });
+      const page = await api<FilePage>(`/api/files?${query}`);
+      if (generation !== fileRequestGeneration.current || requestedAccount !== accountID || requestedPath !== currentPath) return;
+      setFiles(previous => {
+        const known = new Set(previous.map(file => file.id || file.path));
+        return [...previous, ...(page.files || []).filter(file => !known.has(file.id || file.path))];
+      });
+      setNextPageToken(page.nextPageToken || "");
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      if (generation === fileRequestGeneration.current) setBusy(false);
+    }
+  };
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -75,7 +105,16 @@ export default function WebApp() {
   }, [refreshAccounts, refreshTransfers]);
   useEffect(() => { if (accountID) void refreshFiles(accountID, currentPath).catch(error => setMessage(String(error))); }, [accountID, currentPath, refreshFiles]);
   useEffect(() => { const timer = window.setInterval(() => { void refreshTransfers().catch(() => undefined); }, 5000); return () => window.clearInterval(timer); }, [refreshTransfers]);
-  useEffect(() => () => connectAbort.current?.abort(), []);
+  const uploadActive = uploadProgress !== null;
+  useEffect(() => {
+    if (!uploadActive) return;
+    const timer = window.setInterval(() => { void refreshTransfers().catch(() => undefined); }, 1000);
+    return () => window.clearInterval(timer);
+  }, [uploadActive, refreshTransfers]);
+  useEffect(() => () => {
+    connectAbort.current?.abort();
+    uploadRequest.current?.abort();
+  }, []);
 
   const connect = async () => {
     setBusy(true); setMessage("");
@@ -95,28 +134,70 @@ export default function WebApp() {
     } finally { setBusy(false); }
   };
 
+  const uploadOne = (file: File): Promise<void> => new Promise((resolve, reject) => {
+    const data = new FormData();
+    data.append("account_id", accountID);
+    data.append("parent_path", currentPath || root);
+    data.append("name", file.name);
+    data.append("file", file, file.name);
+    const request = new XMLHttpRequest();
+    uploadRequest.current = request;
+    request.open("POST", "/api/upload");
+    request.withCredentials = true;
+    request.upload.onprogress = event => {
+      if (event.lengthComputable) {
+        setUploadProgress({ name: file.name, loaded: event.loaded, total: event.total, stage: "Sending to local TBox Drive service" });
+      }
+    };
+    request.upload.onload = () => {
+      setUploadProgress({ name: file.name, loaded: file.size, total: file.size, stage: "File received locally; TeraBox upload is being finalized" });
+    };
+    request.onload = () => {
+      uploadRequest.current = null;
+      if (request.status >= 200 && request.status < 300) resolve();
+      else {
+        let reason = `Upload failed (HTTP ${request.status})`;
+        try { reason = JSON.parse(request.responseText).error || reason; } catch { /* keep HTTP status */ }
+        reject(new Error(reason));
+      }
+    };
+    request.onerror = () => { uploadRequest.current = null; reject(new Error("Network error while sending file to the local service")); };
+    request.onabort = () => { uploadRequest.current = null; reject(new Error("Upload cancelled")); };
+    request.send(data);
+  });
+
   const uploadFiles = async (selected: FileList | null) => {
-    if (!selected?.length || !accountID) return;
-    setBusy(true); setMessage("");
+    if (!selected?.length || !accountID || busy) return;
+    setBusy(true);
+    setMessage("");
+    setUploadProgress(null);
     let complete = 0;
     const failures: string[] = [];
-    for (const file of Array.from(selected)) {
-      const data = new FormData();
-      data.append("account_id", accountID);
-      data.append("parent_path", currentPath || root);
-      data.append("name", file.name);
-      data.append("file", file, file.name);
-      try {
-        await api("/api/upload", { method: "POST", body: data });
-        complete += 1;
-        setMessage(`Uploaded ${complete} of ${selected.length}: ${file.name}`);
-      } catch (error) { failures.push(`${file.name}: ${String(error)}`); }
+    const filesToUpload = Array.from(selected);
+    try {
+      for (const file of filesToUpload) {
+        setUploadProgress({ name: file.name, loaded: 0, total: file.size, stage: "Preparing upload" });
+        try {
+          await uploadOne(file);
+          complete += 1;
+          setMessage(`Completed ${complete} of ${filesToUpload.length}: ${file.name}`);
+          await refreshTransfers();
+        } catch (error) {
+          failures.push(`${file.name}: ${String(error)}`);
+          if (String(error).includes("Upload cancelled")) break;
+        }
+      }
+      setMessage(failures.length ? `Completed ${complete} of ${filesToUpload.length}. ${failures.join("; ")}` : `Successfully uploaded ${complete} file(s).`);
+    } finally {
+      uploadRequest.current = null;
+      setUploadProgress(null);
+      if (fileInput.current) fileInput.current.value = "";
+      try { await Promise.all([refreshFiles(), refreshTransfers()]); } catch (error) { setMessage(String(error)); }
+      setBusy(false);
     }
-    setMessage(failures.length ? `Uploaded ${complete} of ${selected.length}. ${failures.join("; ")}` : `Successfully uploaded ${complete} file(s).`);
-    if (fileInput.current) fileInput.current.value = "";
-    try { await Promise.all([refreshFiles(), refreshTransfers()]); } catch (error) { setMessage(String(error)); }
-    setBusy(false);
   };
+
+  const cancelUpload = () => uploadRequest.current?.abort();
 
   const download = async (file: CloudFile) => {
     const query = new URLSearchParams({ account_id: accountID, file_id: file.id, name: file.name });
@@ -137,6 +218,52 @@ export default function WebApp() {
     catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   };
+  const move = async (file: CloudFile) => {
+    const destination = window.prompt("Move to folder path (inside your TBox Drive application folder)", root);
+    if (!destination?.trim()) return;
+    const normalized = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    const sourceParent = source.slice(0, source.lastIndexOf("/")) || root;
+    if (normalized === sourceParent) {
+      setMessage("This item is already in that folder.");
+      return;
+    }
+    if (normalized === source || normalized.startsWith(source + "/")) {
+      setMessage("A folder cannot be moved into itself or one of its descendants.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api("/api/files/move", json({ accountID, path: file.path, destination: normalized }));
+      await refreshFiles();
+      setMessage(`Moved ${file.name}.`);
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const copy = async (file: CloudFile) => {
+    if (busy) return;
+    const destination = window.prompt("Copy to folder path inside your TBox Drive application folder", root);
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    if (target === source || target.startsWith(source + "/")) {
+      setMessage("A folder cannot be copied into itself or one of its descendants.");
+      return;
+    }
+    const dot = file.name.lastIndexOf(".");
+    const suggestedName = dot > 0 ? `${file.name.slice(0, dot)} copy${file.name.slice(dot)}` : `${file.name} copy`;
+    const newName = window.prompt("Name of the copied item", suggestedName);
+    if (!newName?.trim()) return;
+    setBusy(true);
+    try {
+      await api("/api/files/copy", json({ accountID, path: file.path, destination: target, name: newName.trim() }));
+      await refreshFiles();
+      setMessage(`Copied ${file.name} to ${target}.`);
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
   const remove = async (file: CloudFile) => {
     if (!window.confirm(`Delete "${file.name}" from TeraBox?`)) return;
     setBusy(true);
@@ -197,13 +324,15 @@ export default function WebApp() {
               {filtered.map(file => <div className="file-row" key={file.id}>
                 <span><button className="file-name" disabled={!file.isDirectory} onClick={() => setCurrentPath(file.path)}><span className="file-icon">{file.isDirectory ? "▰" : "▤"}</span>{file.name}</button></span>
                 <span>{file.isDirectory ? "—" : bytes(file.size)}</span><span>{file.isDirectory ? "Folder" : "File"}</span>
-                <span className="row-actions">{!file.isDirectory && <button className="text-button" disabled={busy} onClick={() => void download(file)}>Download</button>}<button className="text-button" disabled={busy} onClick={() => void rename(file)}>Rename</button><button className="text-button danger-text" disabled={busy} onClick={() => void remove(file)}>Delete</button></span>
+                <span className="row-actions">{!file.isDirectory && <button className="text-button" disabled={busy} onClick={() => void download(file)}>Download</button>}<button className="text-button" disabled={busy} onClick={() => void rename(file)}>Rename</button><button className="text-button" disabled={busy} onClick={() => void move(file)}>Move</button><button className="text-button" disabled={busy} onClick={() => void copy(file)}>Copy</button><button className="text-button danger-text" disabled={busy} onClick={() => void remove(file)}>Delete</button></span>
               </div>)}
             </div> : <div className="empty compact"><h3>{busy ? "Loading…" : "This folder is empty"}</h3><p>Upload files or open another folder.</p></div>}
+            {nextPageToken && <div className="load-more"><button className="secondary" disabled={busy} onClick={() => void loadMoreFiles()}>{busy ? "Loading…" : "Load more files"}</button></div>}
+            {uploadProgress && <div className="upload-progress"><div className="progress-label"><span>{uploadProgress.name}</span><span>{uploadProgress.total ? Math.round(uploadProgress.loaded / uploadProgress.total * 100) : 0}%</span></div><div className="progress"><span style={{ width: `${uploadProgress.total ? Math.min(100, uploadProgress.loaded / uploadProgress.total * 100) : 0}%` }} /></div><small>{uploadProgress.stage} · {bytes(uploadProgress.loaded)} / {bytes(uploadProgress.total)}</small><button className="secondary danger" disabled={!uploadRequest.current} onClick={cancelUpload}>Cancel current upload</button></div>}
           </article>}
         </>}
         {view === "transfers" && <article className="panel"><div className="panel-head"><div><p className="eyebrow">TRANSFER CENTER</p><h2>Recent activity</h2></div><button className="secondary" onClick={() => void refreshTransfers()}>Refresh</button></div>
-          {transfers.length ? <div className="file-list"><div className="file-row file-heading"><span>File</span><span>Progress</span><span>Status</span><span>Direction</span></div>{transfers.map(item => <div className="file-row" key={item.id}><span>{item.destination.split("/").pop() || item.source.split(/[\\/]/).pop()}</span><span>{bytes(item.transferred)} / {bytes(item.size)}</span><span>{item.status}</span><span>{item.direction}</span></div>)}</div> : <div className="empty"><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
+          {transfers.length ? <div className="file-list"><div className="file-row file-heading"><span>File</span><span>Progress</span><span>Status</span><span>Direction</span></div>{transfers.map(item => <div className="file-row" key={item.id}><span>{item.destination.split("/").pop() || item.source.split(/[\\/]/).pop()}</span><span>{bytes(item.transferred)} / {bytes(item.size)}{item.size > 0 && <div className="transfer-mini-progress"><span style={{ width: `${Math.min(100, item.transferred / item.size * 100)}%` }} /></div>}</span><span>{item.status}{item.error ? <small className="transfer-error">{item.error}</small> : null}</span><span>{item.direction}</span></div>)}</div> : <div className="empty"><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
         </article>}
         {view === "settings" && <article className="panel settings-panel"><p className="eyebrow">LOCAL SECURITY</p><h2>Self-hosted mode</h2><div className="security-callout"><strong>Loopback-only access</strong><span>The web service listens on 127.0.0.1. Remote/LAN access is disabled. TeraBox credentials remain in your operating-system credential vault.</span></div><div className="settings-row"><div><strong>Connected account</strong><small>{accounts[0]?.displayName || "No account connected"}</small></div>{accountID && <button className="secondary danger" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>}</div><div className="settings-row"><div><strong>Application folder</strong><small>{root || "Not configured"}</small></div></div></article>}
       </section>

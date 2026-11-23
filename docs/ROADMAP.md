@@ -30,7 +30,7 @@
 - [ ] Benchmark safe provider concurrency against an authorized TeraBox account; keep default conservative until verified
 
 ## M2 File management and desktop explorer
-- [x] Rename, move and delete API adapter methods (verify against authorized account)
+- [x] Rename, move, copy and delete API adapter methods (verify against authorized account)
 - [ ] Officially documented directory creation method
 - [ ] Folder upload preserving nested structure
 - [ ] Explorer sorting, richer file properties and previews
@@ -39,10 +39,12 @@
 - [ ] Windows Explorer drag/drop upload/download and safe overwrite prompts
 - [ ] Explorer properties, thumbnails/preview handlers and notifications
 - [ ] Windows Cloud Files API placeholder integration or documented WinFsp fallback for on-demand files
-- [ ] Pause/resume/cancel controls and transfer queue recovery UX
-- [ ] Download progress events and unified real-time upload/download throughput + ETA
+- [ ] Pause/resume, retry and full transfer queue recovery UX
+- [x] Desktop upload/download progress events, speed/ETA display and active-transfer cancellation
+- [ ] Browser download progress/cancellation and cross-client transfer queue controls
 - [x] Windows WinFsp virtual-drive prototype: remote listing, on-demand whole-file cache hydration, upload-on-flush/close, rename/move/delete
-- [ ] Production-ready Windows virtual drive: byte-range streaming, offline pinning, cache policy, reconnect and conflict-safe writes
+- [x] Serialize same-file cache hydration and preserve size-mismatched local cache data instead of silently overwriting possible unsynced edits
+- [ ] Production-ready Windows virtual drive: byte-range streaming, offline pinning, cache eviction policy, reconnect and conflict-safe writes
 - [ ] macOS Finder/File Provider integration
 - [ ] Linux mount/file-manager integration
 
@@ -71,8 +73,9 @@
 - [ ] ZIP/TAR/TAR.GZ import and optional extraction
 
 ## M5 Web, mobile and TV clients
-- [x] Self-hosted browser/API foundation: loopback-only Go server, same-origin mutation checks, credential isolation, file browsing, quota, upload/download, rename/delete and transfer history (initial implementation; security and live-account validation remain)
-- [ ] Complete browser client: pagination, previews, folder upload, transfer progress and pause/resume/cancel
+- [x] Self-hosted browser/API foundation: loopback-only Go server, same-origin mutation checks, credential isolation, file browsing, quota, upload/download, rename/move/delete and transfer history (initial implementation; security and live-account validation remain)
+- [x] Browser pagination, cloud move/copy, upload request progress, persisted upload/download progress and active upload cancellation
+- [ ] Browser folder upload, previews, pause/resume/retry, in-app download cancellation and complete transfer queue management
 - [ ] Production security review and approved-account acceptance testing for self-hosted web mode
 - [ ] Remote/LAN device access only after separate authenticated device-session and TLS design review
 - [ ] Browser-based web application (React) feature completion using the shared Go HTTP API

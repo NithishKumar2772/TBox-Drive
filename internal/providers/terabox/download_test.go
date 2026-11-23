@@ -25,9 +25,13 @@ func TestDownloadStreamsFromOfficialLink(t *testing.T){
 	defer server.Close()
 	api,err:=newTestAPI(server)
 	if err!=nil{t.Fatal(err)}
-	body,err:=api.Download(context.Background(),"42");if err!=nil{t.Fatal(err)};defer body.Close()
+	body,size,err:=api.DownloadWithSize(context.Background(),"42");if err!=nil{t.Fatal(err)};defer body.Close()
+	if size!=int64(len("streamed file bytes")){t.Fatalf("content length = %d, want %d",size,len("streamed file bytes"))}
 	got,err:=io.ReadAll(body);if err!=nil{t.Fatal(err)}
 	if string(got)!="streamed file bytes"{t.Fatalf("got %q",got)}
+	legacyBody,err:=api.Download(context.Background(),"42");if err!=nil{t.Fatal(err)};defer legacyBody.Close()
+	legacyData,err:=io.ReadAll(legacyBody);if err!=nil{t.Fatal(err)}
+	if string(legacyData)!="streamed file bytes"{t.Fatalf("legacy Download returned %q",legacyData)}
 }
 func TestDownloadRejectsInvalidID(t *testing.T){
 	api,err:=NewAPIClient(APIConfig{AccessToken:"token",TokenInfo:TokenInfo{APIDomain:"https://www.terabox.com",UploadDomain:"https://c-jp.terabox.com"},ApplicationRoot:"/app"});if err!=nil{t.Fatal(err)}

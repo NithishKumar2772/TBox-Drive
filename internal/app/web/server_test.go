@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
@@ -125,5 +127,114 @@ func TestLaunchTokenExchangesForHttpOnlySessionCookie(t *testing.T) {
 	cookie := response.Result().Cookies()
 	if len(cookie)!=1 || cookie[0].Name!="tbox_local_session" || !cookie[0].HttpOnly || cookie[0].SameSite!=http.SameSiteStrictMode {
 		t.Fatalf("unexpected session cookie: %#v",cookie)
+	}
+}
+
+func TestParsePageDefaultsAndValidates(t *testing.T) {
+	tests := []struct {
+		name string
+		value string
+		want int
+	}{
+		{name: "empty", value: "", want: 1},
+		{name: "zero", value: "0", want: 1},
+		{name: "negative", value: "-4", want: 1},
+		{name: "invalid", value: "next", want: 1},
+		{name: "page two", value: "2", want: 2},
+		{name: "large page", value: "250", want: 250},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parsePage(test.value); got != test.want {
+				t.Fatalf("parsePage(%q) = %d, want %d", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+func TestMoveEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
+	server := testServer(t)
+	body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/file.txt","destination":"/Apps/Other"}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/files/move", strings.NewReader(body))
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin", "http://127.0.0.1:8765")
+	req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "inside the TBox Drive application folder") {
+		t.Fatalf("unexpected validation response: %s", response.Body.String())
+	}
+}
+
+func TestValidateFileNameRejectsPathComponents(t *testing.T) {
+	for _, name := range []string{"", " ", ".", "..", "../secret", `folder\\file.txt`, "folder/file.txt", "bad\x00name", "bad\r\nname"} {
+		if err := validateFileName(name); err == nil {
+			t.Errorf("validateFileName(%q) accepted an unsafe name", name)
+		}
+	}
+	for _, name := range []string{"report.pdf", "folder name", "資料.txt"} {
+		if err := validateFileName(name); err != nil {
+			t.Errorf("validateFileName(%q) rejected a valid filename: %v", name, err)
+		}
+	}
+}
+
+func TestCopyEndpointRejectsPathsOutsideApplicationFolder(t *testing.T) {
+	server := testServer(t)
+	body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/file.txt","destination":"/Apps/Other"}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/files/copy", strings.NewReader(body))
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin", "http://127.0.0.1:8765")
+	req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "inside the TBox Drive application folder") {
+		t.Fatalf("unexpected validation response: %s", response.Body.String())
+	}
+}
+
+func TestMoveAndCopyEndpointsRejectDescendantDestinations(t *testing.T) {
+	for _, endpoint := range []string{"/api/files/move", "/api/files/copy"} {
+		t.Run(endpoint, func(t *testing.T) {
+			server := testServer(t)
+			body := `{"accountID":"missing-account","path":"/Apps/TBox-Drive/folder","destination":"/Apps/TBox-Drive/folder/child"}`
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765"+endpoint, strings.NewReader(body))
+			req.Host = "127.0.0.1:8765"
+			req.Header.Set("Origin", "http://127.0.0.1:8765")
+			req.AddCookie(&http.Cookie{Name: "tbox_local_session", Value: server.sessionToken})
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, req)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), "descendants") {
+				t.Fatalf("unexpected validation response: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestDownloadResponseWriterPersistsStreamingProgress(t *testing.T) {
+	server := testServer(t)
+	ctx := context.Background()
+	task := transfer.Task{ID: "web-download-progress", ProviderID: "terabox", Direction: "download", Source: "42", Destination: "file.bin", Size: 5, Status: transfer.StatusQueued}
+	if err := server.store.CreateTransfer(ctx, task); err != nil { t.Fatal(err) }
+	if err := server.store.UpdateProgress(ctx, task.ID, 0, transfer.StatusRunning, ""); err != nil { t.Fatal(err) }
+
+	var output bytes.Buffer
+	writer := &downloadResponseWriter{writer: &output, store: server.store, transferID: task.ID, total: 5}
+	if _, err := writer.Write([]byte("hello")); err != nil { t.Fatal(err) }
+	writer.report()
+	if output.String() != "hello" { t.Fatalf("response body = %q, want hello", output.String()) }
+	got, err := server.store.GetTransfer(ctx, task.ID)
+	if err != nil { t.Fatal(err) }
+	if got.Transferred != 5 || got.Status != transfer.StatusRunning {
+		t.Fatalf("transfer progress = %d/%d status %s, want 5/5 running", got.Transferred, got.Size, got.Status)
 	}
 }

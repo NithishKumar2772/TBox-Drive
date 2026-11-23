@@ -23,12 +23,14 @@ declare global {
       RenameFile: (accountID: string, remotePath: string, newName: string) => Promise<void>;
       DeleteFile: (accountID: string, remotePath: string) => Promise<void>;
       MoveFile: (accountID: string, remotePath: string, destinationDir: string, newName: string) => Promise<void>;
+      CopyFile: (accountID: string, remotePath: string, destinationDir: string, newName: string) => Promise<void>;
       ListFiles: (accountID: string, parentPath: string, pageToken: string) => Promise<FilePage>;
       GetStorageQuota: (accountID: string) => Promise<Quota>;
       SelectUploadFile: () => Promise<string>;
       SelectUploadFiles: () => Promise<string[]>;
       UploadFile: (accountID: string, localPath: string, parentPath: string, name: string, taskID: string) => Promise<UploadResult>;
-      DownloadFile: (accountID: string, fileID: string, fileName: string) => Promise<string>;
+      CancelTransfer: (taskID: string) => Promise<void>;
+      DownloadFile: (accountID: string, fileID: string, fileName: string, size: number, taskID: string) => Promise<string>;
       ListTransfers: (limit: number) => Promise<Transfer[]>;
       GetVirtualDriveStatus: () => Promise<DriveStatus>;
       MountVirtualDrive: (accountID: string, mountpoint: string) => Promise<DriveStatus>;
@@ -67,6 +69,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<TransferProgress | null>(null);
+  const [activeTransferId, setActiveTransferId] = useState("");
   const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
   const autoRefreshInFlight = useRef(false);
   const fileRequestGeneration = useRef(0);
@@ -246,18 +249,32 @@ export default function App() {
       for (const localPath of localPaths) {
         const name = localPath.split(/[\\\\/]/).pop() ?? "upload";
         setMessage(`Uploading ${completed + 1} of ${localPaths.length}: ${name}`);
+        const taskID = `tbox-${crypto.randomUUID()}`;
+        setActiveTransferId(taskID);
         try {
-          const result = await api.UploadFile(accountID, localPath, currentPath, name, "");
+          const result = await api.UploadFile(accountID, localPath, currentPath, name, taskID);
           completed += 1;
           setMessage(`Uploaded ${completed} of ${localPaths.length}: ${result.file.name}`);
         } catch (error) {
           failed.push(`${name}: ${String(error)}`);
+          if (/context canceled|cancelled|canceled/i.test(String(error))) break;
+        } finally {
+          setActiveTransferId("");
         }
       }
       setMessage(failed.length ? `Uploaded ${completed} of ${localPaths.length}. Failed: ${failed.join("; ")}` : `Successfully uploaded ${completed} file(s).`);
       await refreshFiles(); await refreshTransfers();
     } catch (e) { setMessage(String(e)); await refreshTransfers(); }
     finally { setBusy(false); }
+  };
+
+  const cancelActiveTransfer = async () => {
+    const api = desktop();
+    if (!api || !activeTransferId) return;
+    try {
+      await api.CancelTransfer(activeTransferId);
+      setMessage("Transfer cancellation requested. The current upload will stop safely.");
+    } catch (error) { setMessage(String(error)); }
   };
 
   const rename = async (file: CloudFile) => {
@@ -268,6 +285,49 @@ export default function App() {
     setBusy(true);
     try { await api.RenameFile(accountID, file.path, nextName.trim()); setMessage(`Renamed to ${nextName.trim()}`); await refreshFiles(); }
     catch (e) { setMessage(String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const move = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID) return;
+    const destination = window.prompt("Move to folder path inside your TBox Drive application folder", status?.applicationRoot || "");
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    const sourceParent = source.slice(0, source.lastIndexOf("/")) || status?.applicationRoot || "";
+    if (target === sourceParent) { setMessage("This item is already in that folder."); return; }
+    if (target === source || target.startsWith(source + "/")) { setMessage("A folder cannot be moved into itself or one of its descendants."); return; }
+    setBusy(true);
+    try {
+      await api.MoveFile(accountID, file.path, target, "");
+      setMessage(`Moved ${file.name}.`);
+      await refreshFiles();
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const copy = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID || busy) return;
+    const destination = window.prompt("Copy to folder path inside your TBox Drive application folder", status?.applicationRoot || "");
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    if (target === source || target.startsWith(source + "/")) {
+      setMessage("A folder cannot be copied into itself or one of its descendants.");
+      return;
+    }
+    const dot = file.name.lastIndexOf(".");
+    const suggestedName = dot > 0 ? `${file.name.slice(0, dot)} copy${file.name.slice(dot)}` : `${file.name} copy`;
+    const newName = window.prompt("Name of the copied item", suggestedName);
+    if (!newName?.trim()) return;
+    setBusy(true);
+    try {
+      await api.CopyFile(accountID, file.path, target, newName.trim());
+      setMessage(`Copied ${file.name} to ${target}.`);
+      await refreshFiles();
+    } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   };
 
@@ -282,13 +342,16 @@ export default function App() {
 
   const download = async (file: CloudFile) => {
     const api = desktop();
-    if (!api || !accountID) return;
+    if (!api || !accountID || busy) return;
+    const taskID = `tbox-${crypto.randomUUID()}`;
+    setActiveTransferId(taskID);
+    setProgress(null);
     setBusy(true);
     try {
-      const saved = await api.DownloadFile(accountID, file.id, file.name);
+      const saved = await api.DownloadFile(accountID, file.id, file.name, file.size, taskID);
       if (saved) setMessage(`Downloaded to ${saved}`);
     } catch (e) { setMessage(String(e)); }
-    finally { setBusy(false); }
+    finally { setActiveTransferId(""); setBusy(false); await refreshTransfers(); }
   };
 
   const disconnect = async () => {
@@ -372,6 +435,7 @@ export default function App() {
 
         {status && !status.ready && <div className="notice"><strong>Setup required</strong><span>{status.message}</span></div>}
         {message && <div className="message" role="status">{message}</div>}
+        {activeTransferId && <div className="notice"><strong>Transfer running</strong><span>Cancel the active upload or download without affecting completed transfers.</span><button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current transfer</button></div>}
         {device && <div className="connect-panel">
           <div><p className="eyebrow">TERABOX AUTHORIZATION</p><h2>Scan to connect your account</h2><p>Approve this device using your TeraBox account. This window will finish connecting automatically.</p>
             {device.user_code && <p className="user-code">Code: {device.user_code}</p>}
@@ -408,6 +472,8 @@ export default function App() {
                   <span className="row-actions">
                     {!file.isDirectory && <button className="text-button" onClick={() => download(file)} disabled={busy}>Download</button>}
                     <button className="text-button" onClick={() => rename(file)} disabled={busy}>Rename</button>
+                    <button className="text-button" onClick={() => move(file)} disabled={busy}>Move</button>
+                    <button className="text-button" onClick={() => copy(file)} disabled={busy}>Copy</button>
                     <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
                   </span>
                 </div>)}
