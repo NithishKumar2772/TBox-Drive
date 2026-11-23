@@ -294,18 +294,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full milestone list.
 
 ## Quality checks
 
-The current GitHub Actions CI workflow runs:
-
-```powershell
-go mod download
-go test ./...
-go vet ./...
-go build ./...
-```
-
-It also runs Go formatting/module verification, `govulncheck`, frontend dependency audit and production build, and the Windows desktop + self-hosted Web build script.
-
-The main-branch workflow run for the merged Windows/Web foundation passed all three jobs: Go, frontend and Windows packaging. This proves the current automated CI matrix only. It does not replace a TeraBox-account acceptance test, WinFsp installed-machine test, manual upgrade test, platform device testing or an independent security audit.
+The existing main-branch CI validates Go formatting/module files, Go tests, `govulncheck`, vet, build, frontend audit/build and Windows desktop/Web executables. The merged Windows/Web foundation passed all three jobs.\n\nThe release workflow adds a separate, tag/manual-triggered gate: repeat source validation, build both Windows executables, package a portable ZIP, calculate SHA-256 checksums, and only then publish a clearly labelled Windows early-preview release. It does not generate packages for platforms that have no native implementation.\n\nA passing CI run proves only its configured checks. It does not replace a live TeraBox account acceptance test, WinFsp installed-machine test, manual upgrade test, platform-device testing or an independent security audit.
 
 [View GitHub Actions](https://github.com/NithishKumar2772/TBox-Drive/actions)
 
