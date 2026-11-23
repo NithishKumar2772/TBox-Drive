@@ -64,6 +64,11 @@ func(s *TeraBoxService)NewAPIClient(ctx context.Context,accountID string)(*terab
 	if !now.Before(credential.AccessExpiresAt.Add(-5*time.Minute)){
 		token,err:=s.oauth.Refresh(ctx,credential.Token.RefreshToken);if err!=nil{return nil,fmt.Errorf("refresh TeraBox access token: %w",err)}
 		credential.Token=token;credential.AccessExpiresAt=now.Add(time.Duration(token.ExpiresIn)*time.Second)
+		// Refresh tokens are single-use. Persist the replacement immediately,
+		// before any later network call (such as token-info refresh) can fail.
+		rotated,marshalErr:=json.Marshal(credential)
+		if marshalErr!=nil{return nil,fmt.Errorf("encode rotated TeraBox credentials: %w",marshalErr)}
+		if saveErr:=s.secrets.Set(ctx,item.CredentialRef,rotated);saveErr!=nil{return nil,fmt.Errorf("persist rotated TeraBox credentials: %w",saveErr)}
 	}
 	if now.Sub(credential.TokenInfoFetchedAt)>time.Hour{
 		info,err:=s.oauth.TokenInformation(ctx,credential.Token.AccessToken);if err!=nil{return nil,fmt.Errorf("refresh TeraBox API domains: %w",err)}
@@ -78,6 +83,14 @@ func(s *TeraBoxService)ConnectedProvider(ctx context.Context,accountID string)(*
 }
 func(s *TeraBoxService)Disconnect(ctx context.Context,accountID string)error{
 	item,err:=s.accounts.Get(ctx,accountID);if err!=nil{return err}
-	if err:=s.secrets.Delete(ctx,item.CredentialRef);err!=nil{return fmt.Errorf("delete TeraBox credentials: %w",err)}
-	return s.accounts.Delete(ctx,accountID)
+	// Remove the account record first. A database failure must not destroy
+	// the only reference to credentials that are still stored in the vault.
+	if err:=s.accounts.Delete(ctx,accountID);err!=nil{return fmt.Errorf("delete TeraBox account record: %w",err)}
+	if err:=s.secrets.Delete(ctx,item.CredentialRef);err!=nil{
+		if restoreErr:=s.accounts.Save(ctx,item);restoreErr!=nil{
+			return fmt.Errorf("delete TeraBox credentials: %v; restore account record: %w",err,restoreErr)
+		}
+		return fmt.Errorf("delete TeraBox credentials: %w",err)
+	}
+	return nil
 }
