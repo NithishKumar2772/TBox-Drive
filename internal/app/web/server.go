@@ -223,7 +223,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"file":result.File,"taskID":id,"size":fileSize})
 }
 func (s *Server) download(w http.ResponseWriter, r *http.Request) {
-	api, accountID, err := s.apiClient(r)
+	api, _, err := s.apiClient(r)
 	if err != nil { writeError(w, err); return }
 	fileID := strings.TrimSpace(r.URL.Query().Get("file_id"))
 	if fileID == "" { http.Error(w, "file_id is required", http.StatusBadRequest); return }
