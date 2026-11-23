@@ -31,15 +31,16 @@ To use another local port, set `TBOX_WEB_ADDR` to a loopback address such as `12
 ## Browser capabilities in this initial implementation
 
 - Connect a TeraBox account with the official device authorization flow.
-- List files and folders and navigate directories.
+- List files and folders with page-by-page loading and directory navigation.
 - View storage quota.
-- Upload one or more selected files.
+- Upload one or more selected files sequentially, with browser-to-local-service byte progress and a cancel action for the active request.
+- View persisted TeraBox transfer byte progress while the server finalizes each upload.
 - Download files through the browser.
-- Rename, move (API endpoint), and delete cloud items.
-- View persisted transfer records.
+- Rename, move and delete cloud items.
+- View persisted transfer records and their progress/error state.
 - Disconnect a TeraBox account.
 
-Folder upload with nested directory preservation, pause/resume/cancel, live browser upload progress, full transfer queue control and virtual-drive mounting are not yet available in the browser client.
+Folder upload with nested directory preservation, pause/resume/retry controls, full transfer queue management, cancellable downloads and virtual-drive mounting are not yet available in the browser client. The upload progress bar reports bytes sent from the browser to the local service; the Transfers view separately reads persisted provider-side byte progress. Cancelling an upload aborts the HTTP request and cancels its server-side context; the transfer record is marked canceled where the provider upload has started. A dedicated resume action is not yet exposed in the browser UI.
 
 ## API surface
 
