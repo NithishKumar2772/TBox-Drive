@@ -24,7 +24,7 @@ $env:TBOX_TERABOX_APP_FOLDER = "/From: Other Applications/TBox-Drive"
 go run ./cmd/tboxdrive
 ```
 
-Open `http://127.0.0.1:8765`. Stop the service with Ctrl+C. The application folder must be the authorized TeraBox application directory configured for the Open Platform app.
+Open the **private launch URL printed in the console**. It contains a random startup token in the URL fragment; the browser exchanges it for an HttpOnly, SameSite=Strict session cookie and removes the fragment from the address bar. Do not share this launch URL. Stop the service with Ctrl+C. The application folder must be the authorized TeraBox application directory configured for the Open Platform app.
 
 To use another local port, set `TBOX_WEB_ADDR` to a loopback address such as `127.0.0.1:9000`. Non-loopback IP addresses and hostnames are rejected.
 
@@ -66,6 +66,8 @@ All cloud paths supplied by the browser are constrained to the configured TBox D
 - The listener binds to a loopback IP address only. Do not expose this process through a reverse proxy, tunnel, port forward or LAN interface.
 - Requests with non-loopback Host values are rejected.
 - Mutating browser requests require an exact same-origin Origin header. Cross-site Fetch Metadata values are rejected.
+- The console prints a random launch token in a URL fragment. The browser exchanges it for an eight-hour HttpOnly, SameSite=Strict cookie; the fragment is removed from browser history. API requests require this local session.
+- API responses are marked no-store and the app applies a restrictive Content Security Policy.
 - The server does not enable CORS and applies security response headers.
 - Browser responses omit credential references. Access and refresh tokens remain in the OS credential vault and are used only by the Go service.
 - TeraBox OAuth application secrets are supplied to the process through environment variables. Do not commit them or paste them into issue reports.
