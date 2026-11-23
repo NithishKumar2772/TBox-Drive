@@ -95,21 +95,25 @@ See [the detailed roadmap](docs/ROADMAP.md) for milestone-level progress and acc
 The project is organized around a shared Go core and provider-specific adapters. Desktop and future clients should use the same transfer and application services instead of maintaining separate upload implementations.
 
 ```text
-                    TBox Drive
-                        |
-              Shared Go application core
-                        |
-        +---------------+----------------+
-        |               |                |
+                     TBox Drive
+                         |
+               Shared Go application core
+                         |
+        +----------------+----------------+
+        |                |                |
    TeraBox adapter  Transfer engine   SQLite storage
-        |               |                |
-        +---------------+----------------+
-                        |
-              Desktop application
-                 Wails + React
+        |                |                |
+        +----------------+----------------+
+                         |
+              +----------+----------+
+              |                     |
+       Windows desktop       Self-hosted Web
+        Wails + React        Browser + React
+              |                     |
+              +----- shared APIs ---+
 
-       Planned clients: Web / Android / iOS / TV
-       Planned services: Device sessions / Sync
+       Next clients: macOS / Android / iOS / TV
+       Next services: Device sessions / Sync
 ```
 
 For implementation details, see:
