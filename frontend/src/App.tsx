@@ -40,6 +40,14 @@ declare global {
 }
 
 const desktop = () => window.go?.main?.DesktopApp;
+const formatDuration = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "Calculating…";
+  const total = Math.ceil(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m ${secs}s` : `${secs}s`;
+};
 const formatBytes = (value: number) => {
   if (!value) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -59,7 +67,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<TransferProgress | null>(null);
-  const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
+  const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);\n  const autoRefreshInFlight = useRef(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(() => window.localStorage.getItem("tbox-auto-refresh") !== "false");
   const [autoUpdateCheck, setAutoUpdateCheck] = useState(() => window.localStorage.getItem("tbox-auto-update-check") !== "false");
@@ -154,7 +162,12 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem("tbox-auto-refresh", String(autoRefresh));
     if (!autoRefresh || !accountID) return;
-    const handle = window.setInterval(() => { void refreshFiles(accountID, currentPath); void refreshTransfers(); }, 30000);
+    const handle = window.setInterval(async () => {
+      if (autoRefreshInFlight.current) return;
+      autoRefreshInFlight.current = true;
+      try { await Promise.all([refreshFiles(accountID, currentPath), refreshTransfers()]); }
+      finally { autoRefreshInFlight.current = false; }
+    }, 30000);
     return () => window.clearInterval(handle);
   }, [autoRefresh, accountID, currentPath, refreshFiles, refreshTransfers]);
   useEffect(() => { window.localStorage.setItem("tbox-auto-update-check", String(autoUpdateCheck)); }, [autoUpdateCheck]);
@@ -456,7 +469,7 @@ export default function App() {
               <span>{t.direction}</span>
             </div>)}
           </div> : <div className="empty"><div className="empty-icon">⇅</div><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
-          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? `${Math.ceil(progress.etaSeconds)} sec` : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
+          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? formatDuration(progress.etaSeconds) : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
         </article>}
       </section>
     </main>
