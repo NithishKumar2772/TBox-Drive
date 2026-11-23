@@ -15,7 +15,7 @@ type fileManagerItem struct {
 	NewName string `json:"newname,omitempty"`
 }
 type fileManagerInfo struct {
-	Errno int `json:"errno"`
+	Errno *int `json:"errno"`
 	Path string `json:"path"`
 	ShowMsg string `json:"show_msg"`
 }
@@ -94,10 +94,16 @@ func (c *APIClient) fileManager(ctx context.Context, operation string, fileList 
 		return errors.New("TeraBox file operation returned no per-item result; completion is unverified")
 	}
 	for _, item := range result.Info {
-		if item.Errno != 0 {
+		if item.Errno == nil {
+			return errors.New("TeraBox file operation omitted per-item status; completion is unverified")
+		}
+		if *item.Errno != 0 {
 			message := strings.TrimSpace(item.ShowMsg)
 			if message == "" { message = "operation failed" }
-			return fmt.Errorf("TeraBox %s error %d for %s: %s", operation, item.Errno, item.Path, message)
+			return fmt.Errorf("TeraBox %s error %d for %s: %s", operation, *item.Errno, item.Path, message)
+		}
+		if strings.TrimSpace(item.Path) == "" {
+			return errors.New("TeraBox file operation omitted the affected path; completion is unverified")
 		}
 	}
 	return nil

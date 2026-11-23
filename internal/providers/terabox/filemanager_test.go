@@ -56,7 +56,7 @@ func TestFileManagerRejectsUnsafePathsNamesAndRootOperations(t *testing.T) {
 }
 
 func TestFileManagerRejectsUnconfirmedAndPartialResults(t *testing.T) {
-	for _, body := range []string{`{"errno":0}`, `{"errno":0,"info":[]}`, `{"errno":0,"info":[{"errno":0},{"errno":-2,"show_msg":"failed"}]}`} {
+	for _, body := range []string{`{"errno":0}`, `{"errno":0,"info":[]}`, `{"errno":0,"info":[{"errno":0}]}`, `{"errno":0,"info":[{"path":"/app/file"}]}`, `{"errno":0,"info":[{"errno":0},{"errno":-2,"show_msg":"failed"}]}`} {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
 		api, err := newTestAPI(s)
 		if err != nil { t.Fatal(err) }

@@ -26,7 +26,7 @@ func(c *APIClient)DownloadURL(ctx context.Context,fileID string)(string,error){
 	var result downloadLinkResponse
 	if err:=c.getJSON(req,&result);err!=nil{return "",err}
 	for _,item:=range result.Links{
-		if item.FSID!=""&&item.FSID!=fileID{continue}
+		if item.FSID!=fileID{continue}
 		u,err:=url.Parse(item.URL);if err!=nil||!c.isTrustedDownloadURL(u){continue}
 		values:=u.Query();values.Set("access_tokens",c.accessToken);u.RawQuery=values.Encode()
 		return u.String(),nil

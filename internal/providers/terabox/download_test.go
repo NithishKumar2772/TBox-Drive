@@ -42,3 +42,17 @@ func TestDownloadRejectsUntrustedHost(t *testing.T){
 	api,err:=newTestAPI(server);if err!=nil{t.Fatal(err)}
 	if _,err:=api.DownloadURL(context.Background(),"7");err==nil{t.Fatal("expected untrusted host rejection")}
 }
+
+
+
+func TestDownloadRejectsLinkWithoutMatchingFileID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+		fmt.Fprint(w,`{"errno":0,"dlink":[{"dlink":"https://d.terabox.com/file/test"}]}`)
+	}))
+	defer server.Close()
+	api,err := newTestAPI(server)
+	if err != nil { t.Fatal(err) }
+	if _,err := api.DownloadURL(context.Background(),"42"); err == nil {
+		t.Fatal("expected a download link without the requested fs_id to be rejected")
+	}
+}

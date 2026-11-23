@@ -94,7 +94,12 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 	if err=ensureUploadSourceUnchanged(localPath,file,stat);err!=nil{return provider.UploadResult{},err}
 	blockJSON,_:=json.Marshal(blockMD5)
 	pre,preErr:=c.precreate(ctx,remotePath,string(blockJSON));if preErr!=nil{return provider.UploadResult{},preErr}
-	if pre.ReturnType==2{result.File=provider.File{ID:strconv.FormatUint(pre.Info.FSID,10),Name:pathBase(pre.Info.Path),Path:pre.Info.Path,Size:int64(pre.Info.Size),IsDirectory:pre.Info.IsDir==1};transferred=stat.Size();return result,nil}
+	if pre.ReturnType==2{
+		if pre.Info.FSID==0{return provider.UploadResult{},errors.New("TeraBox reported an existing completed file without a valid file ID")}
+		result.File=provider.File{ID:strconv.FormatUint(pre.Info.FSID,10),Name:pathBase(pre.Info.Path),Path:pre.Info.Path,Size:int64(pre.Info.Size),IsDirectory:pre.Info.IsDir==1}
+		transferred=stat.Size()
+		return result,nil
+	}
 	if pre.UploadID==""{return provider.UploadResult{},errors.New("TeraBox precreate response omitted upload ID")}
 	if repo!=nil{if err=repo.SaveProviderSession(ctx,taskID,pre.UploadID,nil);err!=nil{return provider.UploadResult{},fmt.Errorf("save TeraBox upload session: %w",err)}}
 	missing:=pre.BlockList;if len(missing)==0{missing=[]int{0}}

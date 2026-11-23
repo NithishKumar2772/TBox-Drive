@@ -88,3 +88,19 @@ func TestUploadFilePersistsTransferAndParts(t *testing.T){
 	parts,err:=store.ListParts(context.Background(),"task-upload-1");if err!=nil{t.Fatal(err)}
 	if len(parts)!=2||parts[0].Status!="completed"||parts[1].Status!="completed"{t.Fatalf("persisted parts: %#v",parts)}
 }
+
+
+func TestUploadFileRejectsCompletedPrecreateWithoutFileID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+		if r.URL.Path != "/openapi/api/precreate" { t.Errorf("unexpected request path %s",r.URL.Path) }
+		fmt.Fprint(w,`{"errno":0,"return_type":2,"info":{"path":"/app/file.bin","server_filename":"file.bin","size":5242880,"isdir":0}}`)
+	}))
+	defer server.Close()
+	local := path.Join(t.TempDir(),"file.bin")
+	if err := os.WriteFile(local,make([]byte,5<<20),0600); err != nil { t.Fatal(err) }
+	api,err := newTestAPI(server)
+	if err != nil { t.Fatal(err) }
+	if _,err := api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/file.bin",UploadOptions{}); err == nil {
+		t.Fatal("expected completed precreate without fs_id to be rejected")
+	}
+}
