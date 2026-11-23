@@ -6,8 +6,13 @@ $outputDir = Join-Path $repoRoot "dist"
 
 Push-Location $frontendDir
 try {
-    npm ci
-    if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
+    if (Test-Path (Join-Path $frontendDir "package-lock.json")) {
+        npm ci
+    } else {
+        Write-Warning "frontend/package-lock.json is not tracked yet; using npm install. Add and commit the lockfile before producing a stable release."
+        npm install --no-audit --no-fund
+    }
+    if ($LASTEXITCODE -ne 0) { throw "frontend dependency installation failed with exit code $LASTEXITCODE" }
     npm run build
     if ($LASTEXITCODE -ne 0) { throw "frontend build failed with exit code $LASTEXITCODE" }
 }
