@@ -128,7 +128,7 @@ func newSessionToken() (string, error) {
 	return hex.EncodeToString(value[:]), nil
 }
 
-// LaunchURL returns the one-time-to-share local launch URL. The fragment is
+// LaunchURL returns the private local launch URL. The fragment is
 // not sent in HTTP requests or Referer headers; the browser exchanges it for
 // an HttpOnly same-site cookie.
 func (s *Server) LaunchURL(address string) string {
