@@ -230,6 +230,7 @@ func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,task
 		runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":reported,"total":total})
 	}}
 	written,err:=io.Copy(writer,body)
+	writer.report()
 	if err!=nil{return "",fmt.Errorf("download file: %w",err)}
 	if written!=size{return "",fmt.Errorf("download size mismatch: expected %d bytes, received %d",size,written)}
 	if err:=temp.Sync();err!=nil{return "",err}
@@ -251,10 +252,15 @@ func(w *downloadProgressWriter)Write(p []byte)(int,error){
 	n,err:=w.writer.Write(p)
 	w.transferred+=int64(n)
 	if n>0&&w.onProgress!=nil&&(w.transferred-w.lastReported>=1<<20||time.Since(w.lastReport)>=200*time.Millisecond||err!=nil){
-		w.lastReported=w.transferred;w.lastReport=time.Now()
-		w.onProgress(w.transferred,w.total)
+		w.report()
 	}
 	return n,err
+}
+func(w *downloadProgressWriter)report(){
+	if w.onProgress==nil||w.transferred==w.lastReported{return}
+	w.lastReported=w.transferred
+	w.lastReport=time.Now()
+	w.onProgress(w.transferred,w.total)
 }
 
 func(d *DesktopApp)CheckForUpdates()(UpdateInfo,error){
