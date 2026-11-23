@@ -28,7 +28,8 @@
 - [ ] Folder upload preserving nested structure
 - [ ] Explorer sorting, richer file properties and previews
 - [ ] Pause/resume/cancel controls and transfer queue recovery UX
-- [ ] Native Windows File Explorer virtual drive integration
+- [x] Windows WinFsp virtual-drive prototype: remote listing, on-demand whole-file cache hydration, upload-on-flush/close, rename/move/delete
+- [ ] Production-ready Windows virtual drive: byte-range streaming, offline pinning, cache policy, reconnect and conflict-safe writes
 - [ ] macOS Finder/File Provider integration
 - [ ] Linux mount/file-manager integration
 
