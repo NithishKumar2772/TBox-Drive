@@ -16,6 +16,10 @@ jobs:
           go-version: '1.23.x'
       - name: Format Go sources
         run: find ./cmd ./internal -name '*.go' -print0 | xargs -0 gofmt -w
+      - name: Resolve and lock Go dependencies
+        run: go mod tidy
+      - name: Print generated module checksums
+        run: cat go.sum
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./...
