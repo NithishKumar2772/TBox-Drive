@@ -407,6 +407,7 @@ export default function App() {
 
         {status && !status.ready && <div className="notice"><strong>Setup required</strong><span>{status.message}</span></div>}
         {message && <div className="message" role="status">{message}</div>}
+        {activeTransferId && <div className="notice"><strong>Upload running</strong><span>Cancel the active upload without affecting completed transfers.</span><button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current upload</button></div>}
         {device && <div className="connect-panel">
           <div><p className="eyebrow">TERABOX AUTHORIZATION</p><h2>Scan to connect your account</h2><p>Approve this device using your TeraBox account. This window will finish connecting automatically.</p>
             {device.user_code && <p className="user-code">Code: {device.user_code}</p>}
@@ -520,7 +521,7 @@ export default function App() {
               <span>{t.direction}</span>
             </div>)}
           </div> : <div className="empty"><div className="empty-icon">⇅</div><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
-          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? formatDuration(progress.etaSeconds) : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div>{activeTransferId && <button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current upload</button>}</div>}
+          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? formatDuration(progress.etaSeconds) : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
         </article>}
       </section>
     </main>
