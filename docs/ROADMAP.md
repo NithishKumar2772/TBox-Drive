@@ -23,7 +23,7 @@
 - [x] Configurable automatic folder refresh
 - [x] GitHub latest-release checker and automatic startup check preference
 - [x] Upload throughput and estimated-time-remaining display
-- [ ] Real TeraBox account verification with an approved Open Platform app
+- [ ] Add and verify automatic >4 GiB multipart upload acceptance test using an approved TeraBox account; confirm final object is one file\n- [ ] Real TeraBox account verification with an approved Open Platform app
 - [ ] Empty-file upload and bounded parallel uploads
 
 ## M2 File management and desktop explorer
@@ -31,6 +31,11 @@
 - [ ] Officially documented directory creation method
 - [ ] Folder upload preserving nested structure
 - [ ] Explorer sorting, richer file properties and previews
+- [ ] Windows Explorer shell status overlays (cloud-only, syncing, synced, offline, encrypted/locked/unlocked, conflict/error)
+- [ ] Windows Explorer context menu actions (open, download, pin offline, free up space, sync, transfer status, lock vault)
+- [ ] Windows Explorer drag/drop upload/download and safe overwrite prompts
+- [ ] Explorer properties, thumbnails/preview handlers and notifications
+- [ ] Windows Cloud Files API placeholder integration or documented WinFsp fallback for on-demand files
 - [ ] Pause/resume/cancel controls and transfer queue recovery UX
 - [ ] Download progress events and unified real-time upload/download throughput + ETA
 - [x] Windows WinFsp virtual-drive prototype: remote listing, on-demand whole-file cache hydration, upload-on-flush/close, rename/move/delete
@@ -47,9 +52,12 @@
 - [ ] Reconnect and background sync service
 
 ## M4 Security and media
+- [ ] Application vault password setup and one-time unlock per app session
+- [ ] Global lock-now action, idle auto-lock and clear keys on app shutdown
+- [ ] Closed-lock/open-lock indicators on encrypted file rows and Explorer overlays
 - [ ] Per-file encryption opt-in prompt on every upload
-- [ ] First-time file password, confirmation and optional password hint
-- [ ] Password prompt before encrypted file preview/open/download
+- [ ] First-time vault password, confirmation and optional password hint
+- [ ] Password prompt once on app launch/vault lock; subsequent encrypted files open without repeat prompts until lock/exit
 - [ ] Password change by re-wrapping file data keys
 - [ ] Recovery-key generation, export, restore and forgotten-password workflow
 - [ ] Reviewed Argon2id + XChaCha20-Poly1305 chunked file container and key lifecycle
