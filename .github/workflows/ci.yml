@@ -13,13 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
       - name: Format Go sources
         run: find ./cmd ./internal -name '*.go' -print0 | xargs -0 gofmt -w
-      - name: Resolve and lock Go dependencies
-        run: go mod tidy
-      - name: Print resolved module files
-        run: cat go.mod && cat go.sum
+      - name: Verify module files
+        run: go mod tidy -diff
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./...
@@ -40,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -50,3 +48,7 @@ jobs:
         run: npm run build
       - name: Build Windows desktop app
         run: go build -tags desktop -o dist/TBoxDrive.exe ./cmd/tboxdrive-desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TBoxDrive-windows-amd64
+          path: dist/TBoxDrive.exe

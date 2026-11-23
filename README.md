@@ -2,27 +2,26 @@
 
 TBox Drive is an open-source, TeraBox-first cloud file manager and transfer application. The long-term goal is a provider-independent multi-cloud client with a reliable resumable transfer engine.
 
-## Current backend capabilities
+## Current backend and desktop capabilities
 - Official TeraBox OAuth device authorization, polling and token refresh
-- Account-specific API domain discovery
 - OS credential vault integration for user tokens
-- Paginated file listing and storage quota
-- Streaming downloads
-- Multipart uploads with MD5 verification, server-side resume discovery and retry after ambiguous part failures
+- Paginated file listing, storage quota and streaming downloads
+- Multipart uploads with MD5 verification, server-side resume discovery and recovery after ambiguous part failures
 - SQLite persistence for accounts, transfer tasks, upload sessions and completed parts
+- Wails desktop shell with React UI for account connection, file browsing, upload/download and transfer history
 
-Live account use requires TeraBox-issued application credentials and an approved Open Platform application. The desktop UI is still being integrated with the backend.
+Live account use requires TeraBox-issued application credentials and an approved Open Platform application.
 
 ## Technology
 - Go backend and transfer engine
-- Wails desktop shell (planned)
-- React + TypeScript frontend
+- Wails v2 desktop shell
+- React + TypeScript + Vite
 - SQLite persistence
 - Windows Credential Manager / macOS Keychain / Linux Secret Service
 - MIT license
 
 ## Development
-Requirements: Go 1.23+, Node.js 20+.
+Requirements: Go 1.25+, Node.js 20+.
 
 ```sh
 go test ./...
@@ -31,7 +30,7 @@ go build ./...
 cd frontend && npm install && npm run build
 ```
 
-See `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/TERABOX_INTEGRATION.md`, `docs/TRANSFER_ENGINE.md`, and `docs/ROADMAP.md`.
+For the Windows desktop executable, see [docs/DESKTOP.md](docs/DESKTOP.md).
 
 ## Security
 Never commit TeraBox client credentials, user tokens, refresh tokens or cookies. User tokens are stored in the OS credential vault; SQLite stores only credential references. On Linux, a Secret Service provider such as GNOME Keyring or KWallet must be available.
