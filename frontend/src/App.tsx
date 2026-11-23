@@ -290,7 +290,7 @@ export default function App() {
         <header>
           <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{({home:"Home",files:"My Files",pictures:"Pictures",documents:"Documents",archives:"ZIP",videos:"Videos",music:"Music",transfers:"Transfers",drive:"Virtual Drive"} as Record<string,string>)[activeView]}</h1></div>
           <div className="header-actions">
-            {accountID && activeView === "files" && <button onClick={upload} disabled={busy}>Upload file</button>}
+            {accountID && !["transfers", "drive"].includes(activeView) && <button onClick={upload} disabled={busy}>Upload files</button>}
             <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
             {!accounts.length && <button onClick={connect} disabled={busy || !status?.ready}>Connect TeraBox</button>}
           </div>
