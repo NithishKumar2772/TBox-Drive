@@ -203,13 +203,15 @@ func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,task
 	tempName:=temp.Name();committed:=false
 	defer func(){_ = temp.Close();if !committed{_ = os.Remove(tempName)}}()
 	writer:=&downloadProgressWriter{writer:temp,total:size,onProgress:func(done,total int64){
-		transferred=done
-		_ = d.store.UpdateProgress(context.Background(),taskID,done,transfer.StatusRunning,"")
-		runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":done,"total":total})
+		reported:=done
+		if reported>total { reported=total }
+		transferred=reported
+		_ = d.store.UpdateProgress(context.Background(),taskID,reported,transfer.StatusRunning,"")
+		runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":reported,"total":total})
 	}}
 	written,err:=io.Copy(writer,body)
 	if err!=nil{return "",fmt.Errorf("download file: %w",err)}
-	if size>0&&written!=size{return "",fmt.Errorf("download size mismatch: expected %d bytes, received %d",size,written)}
+	if written!=size{return "",fmt.Errorf("download size mismatch: expected %d bytes, received %d",size,written)}
 	if err:=temp.Sync();err!=nil{return "",err}
 	if err:=temp.Close();err!=nil{return "",err}
 	if err:=os.Rename(tempName,destination);err!=nil{return "",err}
