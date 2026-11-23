@@ -61,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/files/rename", s.rename)
 	mux.HandleFunc("POST /api/files/delete", s.deleteFile)
 	mux.HandleFunc("POST /api/files/move", s.moveFile)
+	mux.HandleFunc("POST /api/files/copy", s.copyFile)
 	mux.HandleFunc("/", s.serveAssets)
 	return s.securityHeaders(mux)
 }
@@ -261,6 +262,19 @@ func (s *Server) moveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := api.Move(r.Context(),req.Path,req.Destination,req.Name); err != nil { writeError(w,err); return }; w.WriteHeader(http.StatusNoContent)
+}
+func (s *Server) copyFile(w http.ResponseWriter, r *http.Request) {
+	var req fileOperationRequest
+	if err := decodeJSON(w, r, &req); err != nil { writeError(w, err); return }
+	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	if err := s.validateCloudPath(req.Destination); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	if req.Name != "" {
+		if err := validateFileName(req.Name); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	}
+	api, err := s.service.NewAPIClient(r.Context(), req.AccountID)
+	if err != nil { writeError(w, err); return }
+	if err := api.Copy(r.Context(), req.Path, req.Destination, req.Name); err != nil { writeError(w, err); return }
+	w.WriteHeader(http.StatusNoContent)
 }
 type fileOperationRequest struct {
 	AccountID string `json:"accountID"`
