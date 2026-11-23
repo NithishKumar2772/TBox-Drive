@@ -218,7 +218,7 @@ The script installs frontend dependencies, builds the React frontend and compile
 - `TBoxDrive.exe` — Wails desktop application.
 - `TBoxDrive-Web.exe` — self-hosted browser server.
 
-The build script stops when a command fails. WinFsp must be installed separately to test virtual-drive mounting.
+The build script stops when a command fails. The current repository does not yet track `frontend/package-lock.json`, so the script falls back to `npm install` with a warning; a lockfile should be committed before a reproducible stable release. WinFsp must be installed separately to test virtual-drive mounting.
 
 ### Run the desktop application
 
