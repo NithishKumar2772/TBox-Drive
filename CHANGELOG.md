@@ -1,7 +1,33 @@
 # Changelog
 
+All notable changes to TBox Drive are recorded here. Unreleased work is not a published release.
+
 ## Unreleased
-- Initial repository architecture and Go foundation.
-- Provider interface and TeraBox integration boundary.
-- Transfer primitives and initial tests.
-- Documentation and CI workflow.
+
+### Added
+- TeraBox Open Platform OAuth device authorization, token refresh and OS credential-vault integration.
+- SQLite account references, durable transfer records, multipart part/session persistence and recovery.
+- TeraBox file listing, quota lookup, streaming downloads and multipart upload foundation.
+- Bounded multipart concurrency with a conservative desktop default.
+- Wails v2 + React Windows desktop foundation.
+- Windows WinFsp virtual-drive prototype with whole-file cache hydration and upload-on-close.
+- Loopback-only self-hosted Web server and React browser client for account connection, browsing, quota, upload/download, rename/delete and transfer history.
+- Private browser launch-token exchange, HttpOnly session cookie, same-origin mutation checks, CSP/no-store response headers and cross-process SQLite credential leases.
+- Windows dual-application build script and GitHub Actions release packaging workflow.
+- Documentation for product scope, architecture, security, transfers, desktop, browser mode and roadmap.
+
+### Verified by current main CI
+- Go formatting, module verification, tests, vulnerability scan, vet and build.
+- Frontend dependency audit and production build.
+- Windows desktop and self-hosted Web executable build.
+
+### Still required before an initial public release
+- Live TeraBox account acceptance tests, including upload/download/recovery and provider size limits.
+- Windows installed-machine acceptance for desktop, Web session handling, WinFsp mount/unmount, upgrade and uninstall.
+- Browser folder uploads, live transfer progress and pause/resume/cancel.
+- Production virtual-drive streaming, offline cache/pinning, sync and conflict recovery.
+- Per-file encryption/vault/recovery design and implementation.
+- Native macOS, Linux, Android, iOS and TV applications with platform builds and device acceptance.
+- Independent security review and release signing/verification.
+
+No public release has been published yet.
