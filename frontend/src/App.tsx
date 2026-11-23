@@ -405,7 +405,14 @@ export default function App() {
             <p className="eyebrow">SECURITY</p><h2>Encryption and password protection</h2>
             <div className="security-callout"><strong>Per-file encryption</strong><span>Planned: choose encryption on each upload, set a file password and optional hint, then enter the password when opening the file.</span></div>
             <div className="settings-row"><div><strong>Change encryption password</strong><small>Re-protect file keys without re-uploading the entire file</small></div><span className="not-available">Not available yet</span></div>
-            <div className="settings-row"><div><strong>Forgot password / recovery key</strong><small>Recover encrypted files using a separately saved recovery key</small></div><badge className="not-available">Not available yet</badge></div>
+            <div className="settings-row"><div><strong>Forgot password / recovery key</strong><small>Recover encrypted files using a separately saved recovery key</small></div><span className="not-available">Not available yet</span></div>
+            <div className="encryption-setup-preview">
+              <div><strong>First-time encrypted upload</strong><small>Design preview — controls stay disabled until the encryption engine is implemented.</small></div>
+              <input type="password" placeholder="Set file password" disabled />
+              <input type="password" placeholder="Confirm file password" disabled />
+              <input type="text" placeholder="Optional password hint" disabled />
+              <button disabled>Save password and encrypt</button>
+            </div>
             <div className="security-note">Encryption is not active in this build. Existing uploads are not encrypted by TBox Drive. The password and recovery workflow will be enabled only after the local encryption engine and recovery tests are complete.</div>
           </article>
           <article className="panel settings-panel">
