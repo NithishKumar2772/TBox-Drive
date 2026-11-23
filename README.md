@@ -248,8 +248,8 @@ Open the **private launch URL printed in the console**. It contains a random sta
 
 - Browser uploads are staged to a temporary file before provider upload; temporary free disk space must be sufficient for the file.
 - Set `TBOX_UPLOAD_TEMP_DIR` to choose the upload staging directory.
-- Browser page-by-page listing, cloud move/copy, upload request progress, persisted provider-side transfer progress and cancellation of the active upload are implemented.
-- Nested folder upload, browser previews, pause/resume/retry queue controls, cancellable downloads and full transfer queue management are not yet complete. Browser request progress measures bytes sent to the local service; provider-side transfer progress is shown separately in Transfers.
+- Browser page-by-page listing, cloud move/copy, upload request progress, persisted provider-side upload/download progress and cancellation of the active upload are implemented. Browser downloads stream directly and can be canceled from the browser's download manager.
+- Nested folder upload, browser previews, pause/resume/retry queue controls, in-app download cancellation and full transfer queue management are not yet complete. Browser request progress measures bytes sent to the local service; provider-side transfer progress is shown separately in Transfers.
 - Remote/LAN access is intentionally disabled. Do not expose this server using port forwarding, tunnels or reverse proxies.
 - This local browser service is single-user and is not a production public Web service.
 
