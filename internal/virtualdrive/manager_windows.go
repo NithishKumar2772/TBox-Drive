@@ -192,6 +192,7 @@ func (fs *cloudFileSystem) OpenFile(name string, flag int, perm os.FileMode) (go
 	}
 	openFlags := flag
 	if writing { openFlags |= os.O_CREATE }
+	if !exists { if err := os.Remove(localPath); err != nil && !errors.Is(err, os.ErrNotExist) { return nil, err } }
 	file, err := os.OpenFile(localPath, openFlags, perm)
 	if err != nil { return nil, err }
 	info := cloudInfo{file: item}
