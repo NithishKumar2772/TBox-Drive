@@ -54,11 +54,11 @@ func NewAPIClient(cfg APIConfig) (*APIClient, error) {
 	if strings.TrimSpace(cfg.AccessToken) == "" {
 		return nil, errors.New("TeraBox access token is required")
 	}
-	apiBase, err := serviceBase(cfg.TokenInfo.APIDomain, serviceDomainAPI)
+	apiBase, err := serviceBase(cfg.TokenInfo.APIDomain)
 	if err != nil {
 		return nil, fmt.Errorf("invalid TeraBox API domain: %w", err)
 	}
-	uploadBase, err := serviceBase(cfg.TokenInfo.UploadDomain, serviceDomainUpload)
+	uploadBase, err := serviceBase(cfg.TokenInfo.UploadDomain)
 	if err != nil {
 		return nil, fmt.Errorf("invalid TeraBox upload domain: %w", err)
 	}
@@ -91,7 +91,7 @@ func NewAPIClient(cfg APIConfig) (*APIClient, error) {
 }
 
 
-func NewAPIClientWithTestDomains(cfg APIConfig) (*APIClient,error) {
+func newAPIClientWithTestDomains(cfg APIConfig) (*APIClient,error) {
 	if cfg.HTTPClient == nil { return nil, errors.New("test HTTP client is required") }
 	if strings.TrimSpace(cfg.AccessToken) == "" { return nil, errors.New("TeraBox access token is required") }
 	parseLoopback := func(raw string) (string,error) {
@@ -110,13 +110,7 @@ func NewAPIClientWithTestDomains(cfg APIConfig) (*APIClient,error) {
 	return &APIClient{accessToken:cfg.AccessToken,apiBase:apiBase,uploadBase:uploadBase,applicationRoot:root,http:&safe,downloadHTTP:&download},nil
 }
 
-type serviceDomainKind int
-const (
-	serviceDomainAPI serviceDomainKind = iota
-	serviceDomainUpload
-)
-
-func serviceBase(raw string, kind serviceDomainKind) (string, error) {
+func serviceBase(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" { return "", errors.New("domain is empty") }
 	if !strings.Contains(raw, "://") { raw = "https://" + raw }
@@ -127,13 +121,13 @@ func serviceBase(raw string, kind serviceDomainKind) (string, error) {
 		u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return "", errors.New("service domain must be a trusted HTTPS origin")
 	}
-	if !isTrustedServiceHost(host, kind) {
+	if !isTrustedServiceHost(host) {
 		return "", fmt.Errorf("untrusted TeraBox service hostname %q", host)
 	}
 	return "https://" + host, nil
 }
 
-func isTrustedServiceHost(host string, kind serviceDomainKind) bool {
+func isTrustedServiceHost(host string) bool {
 	if host == "terabox.com" || strings.HasSuffix(host, ".terabox.com") ||
 		host == "terabox.app" || strings.HasSuffix(host, ".terabox.app") {
 		return true
