@@ -28,3 +28,28 @@ func TestNormalizeVirtualPathRejectsTraversal(t *testing.T) {
 		}
 	}
 }
+
+
+func TestValidateAccountDisconnect(t *testing.T) {
+	tests := []struct {
+		name string
+		status Status
+		mountedAccountID string
+		accountID string
+		wantErr bool
+	}{
+		{name: "mounted account cannot disconnect", status: Status{Mounted: true}, mountedAccountID: "terabox:1", accountID: "terabox:1", wantErr: true},
+		{name: "unknown mounted account fails closed", status: Status{Mounted: true}, accountID: "terabox:1", wantErr: true},
+		{name: "different account may disconnect", status: Status{Mounted: true}, mountedAccountID: "terabox:1", accountID: "terabox:2"},
+		{name: "unmounted account may disconnect", accountID: "terabox:1"},
+		{name: "empty account ID rejected", status: Status{Mounted: true}, mountedAccountID: "terabox:1", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateAccountDisconnect(test.status, test.mountedAccountID, test.accountID)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("ValidateAccountDisconnect() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}

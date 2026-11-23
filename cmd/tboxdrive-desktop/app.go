@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
@@ -40,7 +42,16 @@ type githubRelease struct {
 	HTMLURL string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
 }
-type DesktopApp struct { ctx context.Context; store *sqlite.Store; service *app.TeraBoxService; drive *virtualdrive.Manager; applicationRoot string; message string }
+type DesktopApp struct {
+	ctx context.Context
+	store *sqlite.Store
+	service *app.TeraBoxService
+	drive *virtualdrive.Manager
+	applicationRoot string
+	message string
+	driveMu sync.Mutex
+	mountedAccountID string
+}
 func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),message:"Starting TBox Drive…"}}
 func(d *DesktopApp)startup(ctx context.Context){
 	d.ctx=ctx
@@ -53,7 +64,13 @@ func(d *DesktopApp)startup(ctx context.Context){
 	service,err:=app.NewTeraBoxService(oauth,secrets,store,store,d.applicationRoot);if err!=nil{d.message="Cannot initialize TeraBox service: "+err.Error();return}
 	d.service=service;d.message="TBox Drive is ready."
 }
-func(d *DesktopApp)shutdown(context.Context){if d.drive!=nil{d.drive.Unmount()};if d.store!=nil{_ = d.store.Close()}}
+func(d *DesktopApp)shutdown(context.Context){
+	d.driveMu.Lock()
+	if d.drive!=nil{d.drive.Unmount()}
+	d.mountedAccountID=""
+	d.driveMu.Unlock()
+	if d.store!=nil{_ = d.store.Close()}
+}
 func(d *DesktopApp)GetAppStatus()AppStatus{return AppStatus{Ready:d.service!=nil,Message:d.message,ApplicationRoot:d.applicationRoot}}
 
 func(d *DesktopApp)GetVirtualDriveStatus()virtualdrive.Status{
@@ -61,23 +78,40 @@ func(d *DesktopApp)GetVirtualDriveStatus()virtualdrive.Status{
 	return d.drive.GetStatus()
 }
 func(d *DesktopApp)MountVirtualDrive(accountID,mountpoint string)(virtualdrive.Status,error){
+	d.driveMu.Lock()
+	defer d.driveMu.Unlock()
 	if err:=d.requireService();err!=nil{return virtualdrive.Status{},err}
 	if d.drive==nil{return virtualdrive.Status{},errors.New("virtual drive manager is unavailable")}
 	if _,err:=d.store.Get(d.ctx,accountID);err!=nil{return virtualdrive.Status{},fmt.Errorf("select a connected TeraBox account: %w",err)}
 	cacheRoot,err:=os.UserCacheDir();if err!=nil{return virtualdrive.Status{},err}
-	cacheDir:=filepath.Join(cacheRoot,"TBox Drive","drive-cache")
+	accountHash:=sha256.Sum256([]byte(accountID))
+	cacheDir:=filepath.Join(cacheRoot,"TBox Drive","drive-cache",hex.EncodeToString(accountHash[:]))
 	factory:=func(ctx context.Context)(*terabox.APIClient,error){return d.service.NewAPIClient(ctx,accountID)}
-	return d.drive.Mount(d.ctx,factory,d.applicationRoot,cacheDir,mountpoint)
+	status,mountErr:=d.drive.Mount(d.ctx,factory,d.applicationRoot,cacheDir,mountpoint)
+	if mountErr==nil && status.Mounted { d.mountedAccountID=accountID }
+	return status,mountErr
 }
 func(d *DesktopApp)UnmountVirtualDrive()virtualdrive.Status{
+	d.driveMu.Lock()
+	defer d.driveMu.Unlock()
 	if d.drive==nil{return virtualdrive.Status{Mounted:false,Message:"Virtual drive manager is unavailable."}}
-	return d.drive.Unmount()
+	status:=d.drive.Unmount()
+	if !status.Mounted { d.mountedAccountID="" }
+	return status
 }
 func(d *DesktopApp)requireService()error{if d.service==nil{return errors.New(d.message)};return nil}
 func(d *DesktopApp)StartTeraBoxConnect()(terabox.DeviceAuthorization,error){if err:=d.requireService();err!=nil{return terabox.DeviceAuthorization{},err};return d.service.BeginConnect(d.ctx)}
 func(d *DesktopApp)CompleteTeraBoxConnect(device terabox.DeviceAuthorization)(account.Account,error){if err:=d.requireService();err!=nil{return account.Account{},err};return d.service.CompleteConnect(d.ctx,device)}
 func(d *DesktopApp)ListAccounts()([]account.Account,error){if err:=d.requireService();err!=nil{return nil,err};return d.service.ListAccounts(d.ctx)}
-func(d *DesktopApp)DisconnectAccount(accountID string)error{if err:=d.requireService();err!=nil{return err};return d.service.Disconnect(d.ctx,accountID)}
+func(d *DesktopApp)DisconnectAccount(accountID string)error{
+	d.driveMu.Lock()
+	defer d.driveMu.Unlock()
+	if err:=d.requireService();err!=nil{return err}
+	if d.drive!=nil {
+		if err:=virtualdrive.ValidateAccountDisconnect(d.drive.GetStatus(),d.mountedAccountID,accountID);err!=nil{return err}
+	}
+	return d.service.Disconnect(d.ctx,accountID)
+}
 func(d *DesktopApp)ListFiles(accountID,parentPath,pageToken string)(FilePage,error){
 	if err:=d.requireService();err!=nil{return FilePage{},err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return FilePage{},err}
 	if strings.TrimSpace(parentPath)==""{parentPath=d.applicationRoot+"/"}

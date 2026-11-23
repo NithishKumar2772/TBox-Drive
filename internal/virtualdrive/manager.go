@@ -38,3 +38,16 @@ func NormalizeVirtualPath(name string) (string, error) {
 	clean := path.Clean("/" + strings.TrimLeft(name, "/"))
 	return strings.TrimPrefix(clean, "/"), nil
 }
+
+
+// ValidateAccountDisconnect prevents removing credentials for an account whose
+// virtual drive is still mounted. If the mounted account is unknown, fail closed.
+func ValidateAccountDisconnect(status Status, mountedAccountID, accountID string) error {
+	if strings.TrimSpace(accountID) == "" {
+		return errors.New("account ID is required")
+	}
+	if status.Mounted && (mountedAccountID == "" || mountedAccountID == accountID) {
+		return errors.New("unmount the TeraBox virtual drive before disconnecting this account")
+	}
+	return nil
+}
