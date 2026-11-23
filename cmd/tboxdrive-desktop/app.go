@@ -53,6 +53,8 @@ type DesktopApp struct {
 	mountedAccountID string
 	transferMu sync.Mutex
 	transferCancels map[string]context.CancelFunc
+	transferWG sync.WaitGroup
+	shuttingDown bool
 }
 func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),transferCancels:make(map[string]context.CancelFunc),message:"Starting TBox Drive…"}}
 func(d *DesktopApp)startup(ctx context.Context){
@@ -68,7 +70,11 @@ func(d *DesktopApp)startup(ctx context.Context){
 }
 func(d *DesktopApp)shutdown(context.Context){
 	d.transferMu.Lock()
+	d.shuttingDown = true
 	for _, cancel := range d.transferCancels { cancel() }
+	d.transferMu.Unlock()
+	d.transferWG.Wait()
+	d.transferMu.Lock()
 	d.transferCancels = make(map[string]context.CancelFunc)
 	d.transferMu.Unlock()
 	d.driveMu.Lock()
@@ -137,6 +143,11 @@ func(d *DesktopApp)UploadFile(accountID,localPath,parentPath,name,taskID string)
 	if parentPath==""{parentPath=d.applicationRoot}
 	transferCtx,cancel:=context.WithCancel(d.ctx)
 	d.transferMu.Lock()
+	if d.shuttingDown {
+		d.transferMu.Unlock()
+		cancel()
+		return provider.UploadResult{}, errors.New("application is shutting down")
+	}
 	if d.transferCancels==nil { d.transferCancels=make(map[string]context.CancelFunc) }
 	if _,exists:=d.transferCancels[taskID];exists {
 		d.transferMu.Unlock()
@@ -144,12 +155,14 @@ func(d *DesktopApp)UploadFile(accountID,localPath,parentPath,name,taskID string)
 		return provider.UploadResult{},errors.New("transfer ID is already active")
 	}
 	d.transferCancels[taskID]=cancel
+	d.transferWG.Add(1)
 	d.transferMu.Unlock()
 	defer func(){
 		cancel()
 		d.transferMu.Lock()
 		delete(d.transferCancels,taskID)
 		d.transferMu.Unlock()
+		d.transferWG.Done()
 	}()
 	api,err:=d.service.NewAPIClient(transferCtx,accountID);if err!=nil{return provider.UploadResult{},err}
 	return api.UploadFile(transferCtx,localPath,path.Join(parentPath,name),terabox.UploadOptions{Repository:d.store,TransferID:taskID,OnProgress:func(done,total int64){
@@ -179,17 +192,24 @@ func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,task
 	if taskID==""{var id [16]byte;if _,err:=rand.Read(id[:]);err!=nil{return "",err};taskID="tbox-"+hex.EncodeToString(id[:])}
 	transferCtx,cancel:=context.WithCancel(d.ctx)
 	d.transferMu.Lock()
+	if d.shuttingDown {
+		d.transferMu.Unlock()
+		cancel()
+		return "", errors.New("application is shutting down")
+	}
 	if d.transferCancels==nil{d.transferCancels=make(map[string]context.CancelFunc)}
 	if _,exists:=d.transferCancels[taskID];exists{
 		d.transferMu.Unlock();cancel()
 		return "",errors.New("transfer ID is already active")
 	}
 	d.transferCancels[taskID]=cancel
+	d.transferWG.Add(1)
 	d.transferMu.Unlock()
 	var transferred int64
 	defer func(){
 		cancel()
 		d.transferMu.Lock();delete(d.transferCancels,taskID);d.transferMu.Unlock()
+		d.transferWG.Done()
 		status:=transfer.StatusFailed;message:="download failed"
 		if retErr==nil{status=transfer.StatusCompleted;transferred=size;message=""}else if errors.Is(retErr,context.Canceled){status=transfer.StatusCanceled;message="download canceled"}
 		if d.store!=nil{_ = d.store.UpdateProgress(context.Background(),taskID,transferred,status,message)}
