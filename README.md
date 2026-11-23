@@ -10,7 +10,9 @@ TBox Drive is an open-source, TeraBox-first cloud file manager and transfer appl
 - SQLite persistence for accounts, transfer tasks, upload sessions and completed parts
 - Wails desktop shell with React UI for account connection, file browsing, upload/download and transfer history
 
-Live account use requires TeraBox-issued application credentials and an approved Open Platform application.
+Live account use requires TeraBox-issued application credentials and an approved Open Platform application. The current desktop build is an early foundation, not yet a virtual drive or synchronization client.
+
+See [docs/PRODUCT_SPECIFICATION.md](docs/PRODUCT_SPECIFICATION.md) for the confirmed product scope and [docs/ROADMAP.md](docs/ROADMAP.md) for implementation status.
 
 ## Technology
 - Go backend and transfer engine
