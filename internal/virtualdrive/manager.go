@@ -3,6 +3,8 @@ package virtualdrive
 import (
 	"context"
 	"errors"
+	"path"
+	"strings"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 )
