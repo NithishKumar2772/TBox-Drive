@@ -43,7 +43,19 @@ User access and refresh tokens are stored in the OS credential vault. SQLite sto
 - File download, rename and delete
 - Transfer history
 - System/light/dark appearance selection
+- Profile dropdown and settings screen
+- Configurable automatic current-folder and transfer-list refresh (30-second interval)
+- Automatic GitHub latest-release check preference and manual check
+- Upload throughput and estimated-time-remaining display
 - Windows virtual-drive mount/unmount controls
+
+## Profile, settings and transfer monitoring
+
+The top-right profile menu provides access to account information, settings, sign-out and release checks. Settings include automatic folder refresh and GitHub release checks. Transfer progress events display uploaded bytes, current throughput and estimated remaining time. Download speed/ETA is not yet wired to the same progress-event contract.
+
+The release checker reads the latest public GitHub release metadata. It does not silently download or install updates; users open the release page to review and install a release.
+
+Per-file password encryption, password hints, change-password and recovery-key flows are specified in `docs/PRODUCT_SPECIFICATION.md`, but are not enabled in this build. Do not use the current app to assume files are encrypted.
 
 ## Windows virtual-drive prototype
 
