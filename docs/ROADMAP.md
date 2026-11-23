@@ -30,7 +30,7 @@
 - [ ] Benchmark safe provider concurrency against an authorized TeraBox account; keep default conservative until verified
 
 ## M2 File management and desktop explorer
-- [x] Rename, move and delete API adapter methods (verify against authorized account)
+- [x] Rename, move, copy and delete API adapter methods (verify against authorized account)
 - [ ] Officially documented directory creation method
 - [ ] Folder upload preserving nested structure
 - [ ] Explorer sorting, richer file properties and previews
@@ -74,8 +74,8 @@
 
 ## M5 Web, mobile and TV clients
 - [x] Self-hosted browser/API foundation: loopback-only Go server, same-origin mutation checks, credential isolation, file browsing, quota, upload/download, rename/move/delete and transfer history (initial implementation; security and live-account validation remain)
-- [x] Browser pagination, cloud move, upload request progress, persisted provider-side progress and active upload cancellation
-- [ ] Browser folder upload, previews, pause/resume/retry, cancellable downloads and complete transfer queue management
+- [x] Browser pagination, cloud move/copy, upload request progress, persisted upload/download progress and active upload cancellation
+- [ ] Browser folder upload, previews, pause/resume/retry, in-app download cancellation and complete transfer queue management
 - [ ] Production security review and approved-account acceptance testing for self-hosted web mode
 - [ ] Remote/LAN device access only after separate authenticated device-session and TLS design review
 - [ ] Browser-based web application (React) feature completion using the shared Go HTTP API
