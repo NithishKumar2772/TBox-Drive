@@ -57,7 +57,11 @@ jobs:
         run: npm run build
       - name: Build Windows desktop app
         run: go build -tags desktop -o dist/TBoxDrive.exe ./cmd/tboxdrive-desktop
+      - name: Build Windows self-hosted web app
+        run: go build -o dist/TBoxDrive-Web.exe ./cmd/tboxdrive
       - uses: actions/upload-artifact@v7
         with:
           name: TBoxDrive-windows-amd64
-          path: dist/TBoxDrive.exe
+          path: |
+            dist/TBoxDrive.exe
+            dist/TBoxDrive-Web.exe
