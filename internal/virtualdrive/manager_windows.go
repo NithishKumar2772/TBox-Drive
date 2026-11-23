@@ -249,16 +249,44 @@ type cloudHandle struct {
 	mu sync.Mutex
 }
 
-func (h *cloudHandle) Read(p []byte) (int,error) { if h.file==nil{return 0,errors.New("cannot read a directory")}; return h.file.Read(p) }
-func (h *cloudHandle) Write(p []byte) (int,error) { if h.file==nil{return 0,errors.New("cannot write a directory")}; h.dirty=true; return h.file.Write(p) }
-func (h *cloudHandle) ReadAt(p []byte, off int64) (int,error) { if h.file==nil{return 0,errors.New("cannot read a directory")}; return h.file.ReadAt(p,off) }
-func (h *cloudHandle) WriteAt(p []byte, off int64) (int,error) { if h.file==nil{return 0,errors.New("cannot write a directory")}; h.dirty=true; return h.file.WriteAt(p,off) }
-func (h *cloudHandle) Seek(off int64, whence int) (int64,error) { if h.file==nil{return 0,errors.New("cannot seek a directory")}; return h.file.Seek(off,whence) }
-func (h *cloudHandle) Stat() (os.FileInfo,error) { if h.file!=nil { return h.file.Stat() }; return h.info,nil }
-func (h *cloudHandle) Sync() error { if h.file==nil{return nil}; if err:=h.file.Sync();err!=nil{return err}; return h.uploadIfDirty() }
-func (h *cloudHandle) Truncate(size int64) error { if h.file==nil{return errors.New("cannot truncate a directory")}; h.dirty=true; return h.file.Truncate(size) }
+func (h *cloudHandle) Read(p []byte) (int,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return 0,os.ErrClosed}; if h.file==nil{return 0,errors.New("cannot read a directory")}; return h.file.Read(p)
+}
+func (h *cloudHandle) Write(p []byte) (int,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return 0,os.ErrClosed}; if h.file==nil{return 0,errors.New("cannot write a directory")}
+	n,err:=h.file.Write(p); if n>0{h.dirty=true}; return n,err
+}
+func (h *cloudHandle) ReadAt(p []byte, off int64) (int,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return 0,os.ErrClosed}; if h.file==nil{return 0,errors.New("cannot read a directory")}; return h.file.ReadAt(p,off)
+}
+func (h *cloudHandle) WriteAt(p []byte, off int64) (int,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return 0,os.ErrClosed}; if h.file==nil{return 0,errors.New("cannot write a directory")}
+	n,err:=h.file.WriteAt(p,off); if n>0{h.dirty=true}; return n,err
+}
+func (h *cloudHandle) Seek(off int64, whence int) (int64,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return 0,os.ErrClosed}; if h.file==nil{return 0,errors.New("cannot seek a directory")}; return h.file.Seek(off,whence)
+}
+func (h *cloudHandle) Stat() (os.FileInfo,error) {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return nil,os.ErrClosed}; if h.file!=nil { return h.file.Stat() }; return h.info,nil
+}
+func (h *cloudHandle) Sync() error {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return os.ErrClosed}; if h.file==nil{return nil}; if err:=h.file.Sync();err!=nil{return err}; return h.uploadIfDirty()
+}
+func (h *cloudHandle) Truncate(size int64) error {
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return os.ErrClosed}; if h.file==nil{return errors.New("cannot truncate a directory")}
+	if err:=h.file.Truncate(size);err!=nil{return err};h.dirty=true;return nil
+}
 func (h *cloudHandle) Readdir(count int) ([]os.FileInfo,error) {
-	if h.file!=nil{return nil,errors.New("not a directory")}
+	h.mu.Lock(); defer h.mu.Unlock()
+	if h.closed{return nil,os.ErrClosed}; if h.file!=nil{return nil,errors.New("not a directory")}
 	if h.index>=len(h.entries){return nil,io.EOF}
 	end:=len(h.entries);if count>0&&end-h.index>count{end=h.index+count}
 	result:=append([]os.FileInfo(nil),h.entries[h.index:end]...);h.index=end
