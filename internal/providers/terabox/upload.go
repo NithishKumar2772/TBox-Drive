@@ -24,22 +24,24 @@ const (
 	DefaultUploadChunkSize int64 = 8 << 20
 	minMultiPartSize int64 = 4 << 20
 	teraboxAppID = "250528"
+	maxTeraBoxParts = 1_000_000
 )
+type uploadPart struct { Index int; Offset,Size int64 }
 type UploadOptions struct { ChunkSize int64; RenamePolicy *int; OnProgress func(transferred,total int64) }
 type precreateResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;UploadID string `json:"uploadid"`;ReturnType int `json:"return_type"`;BlockList []int `json:"block_list"`;Info apiFile `json:"info"` }
 type partResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;MD5 string `json:"md5"`;UploadID string `json:"uploadid"`;PartSeq int `json:"partseq"` }
 type createResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;FSID uint64 `json:"fs_id"`;Path string `json:"path"`;Name string `json:"server_filename"`;Size uint64 `json:"size"`;IsDir int `json:"isdir"`;Modified uint64 `json:"mtime"` }
 
-func PlanTeraBoxChunks(fileSize,preferredSize int64)([]Chunk,error){
+func PlanTeraBoxChunks(fileSize,preferredSize int64)([]uploadPart,error){
 	if fileSize<0{return nil,errors.New("file size cannot be negative")}
 	if preferredSize<=minMultiPartSize{return nil,errors.New("preferred chunk size must exceed 4 MiB")}
 	if fileSize==0{return nil,errors.New("empty-file upload is not yet supported")}
 	count:=1+(fileSize-1)/preferredSize
 	for count>1&&fileSize/count<=minMultiPartSize{count--}
-	if count>MaxPlannedChunks{return nil,fmt.Errorf("upload requires too many parts (maximum %d)",MaxPlannedChunks)}
+	if count>maxTeraBoxParts{return nil,fmt.Errorf("upload requires too many parts (maximum %d)",maxTeraBoxParts)}
 	base,extra:=fileSize/count,fileSize%count
-	chunks:=make([]Chunk,0,int(count));var offset int64
-	for i:=int64(0);i<count;i++{size:=base;if i<extra{size++};if count>1&&size<=minMultiPartSize{return nil,errors.New("unable to satisfy TeraBox multi-part minimum size")};chunks=append(chunks,Chunk{Index:int(i),Offset:offset,Size:size});offset+=size}
+	chunks:=make([]uploadPart,0,int(count));var offset int64
+	for i:=int64(0);i<count;i++{size:=base;if i<extra{size++};if count>1&&size<=minMultiPartSize{return nil,errors.New("unable to satisfy TeraBox multi-part minimum size")};chunks=append(chunks,uploadPart{Index:int(i),Offset:offset,Size:size});offset+=size}
 	return chunks,nil
 }
 
@@ -68,8 +70,7 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 		if !strings.EqualFold(got,blockMD5[index]){return provider.UploadResult{},fmt.Errorf("TeraBox part %d checksum mismatch",index)}
 		transferred+=part.Size;if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
 	}
-	rtype:=1 // documented default: rename when a path conflict exists
-	if options.RenamePolicy!=nil{rtype=*options.RenamePolicy}
+	rtype:=1;if options.RenamePolicy!=nil{rtype=*options.RenamePolicy}
 	created,err:=c.createFile(ctx,remotePath,stat.Size(),pre.UploadID,string(blockJSON),rtype);if err!=nil{return provider.UploadResult{},err}
 	if created.FSID==0{return provider.UploadResult{},errors.New("TeraBox create response omitted file ID")}
 	name:=created.Name;if name==""{name=pathBase(created.Path)}
@@ -84,7 +85,7 @@ func(c *APIClient)createFile(ctx context.Context,remotePath string,size int64,up
 	q:=url.Values{"access_tokens":{c.accessToken}};form:=url.Values{"path":{remotePath},"size":{strconv.FormatInt(size,10)},"uploadid":{uploadID},"block_list":{blockJSON},"rtype":{strconv.Itoa(rtype)}}
 	var result createResponse;if err:=c.postFormJSON(ctx,c.apiBase+"/openapi/api/create?"+q.Encode(),form,&result);err!=nil{return result,err};return result,nil
 }
-func(c *APIClient)uploadPart(ctx context.Context,file *os.File,remotePath,uploadID string,part Chunk)(string,error){
+func(c *APIClient)uploadPart(ctx context.Context,file *os.File,remotePath,uploadID string,part uploadPart)(string,error){
 	var header bytes.Buffer;writer:=multipart.NewWriter(&header);if _,err:=writer.CreateFormFile("file",filepath.Base(file.Name()));err!=nil{return "",err};prefixLen:=header.Len()
 	if err:=writer.Close();err!=nil{return "",err};all:=header.Bytes();prefix:=append([]byte(nil),all[:prefixLen]...);suffix:=append([]byte(nil),all[prefixLen:]...)
 	body:=io.MultiReader(bytes.NewReader(prefix),io.NewSectionReader(file,part.Offset,part.Size),bytes.NewReader(suffix))
