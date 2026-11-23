@@ -32,9 +32,9 @@ func NormalizeVirtualPath(name string) (string, error) {
 	if strings.ContainsRune(name, 0) {
 		return "", errors.New("path contains a NUL character")
 	}
-	clean := path.Clean("/" + strings.TrimLeft(name, "/"))
-	if clean == "/.." || strings.HasPrefix(clean, "/../") {
-		return "", errors.New("path traversal is not allowed")
+	for _, segment := range strings.Split(name, "/") {
+		if segment == ".." { return "", errors.New("path traversal is not allowed") }
 	}
+	clean := path.Clean("/" + strings.TrimLeft(name, "/"))
 	return strings.TrimPrefix(clean, "/"), nil
 }
