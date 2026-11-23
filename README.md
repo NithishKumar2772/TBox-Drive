@@ -12,6 +12,8 @@ TBox Drive is an open-source, TeraBox-first cloud file manager and transfer appl
 
 Live account use requires TeraBox-issued application credentials and an approved Open Platform application. The current desktop build is an early foundation, not yet a virtual drive or synchronization client.
 
+Windows virtual-drive mounting requires the separately installed [WinFsp runtime](https://winfsp.dev/rel/). The first prototype hydrates complete files on open; byte-range streaming and production-grade offline synchronization are still in development.
+
 See [docs/PRODUCT_SPECIFICATION.md](docs/PRODUCT_SPECIFICATION.md) for the confirmed product scope and [docs/ROADMAP.md](docs/ROADMAP.md) for implementation status.
 
 ## Technology
