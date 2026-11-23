@@ -241,6 +241,29 @@ export default function WebApp() {
     finally { setBusy(false); }
   };
 
+  const copy = async (file: CloudFile) => {
+    if (busy) return;
+    const destination = window.prompt("Copy to folder path inside your TBox Drive application folder", root);
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    if (target === source || target.startsWith(source + "/")) {
+      setMessage("A folder cannot be copied into itself or one of its descendants.");
+      return;
+    }
+    const dot = file.name.lastIndexOf(".");
+    const suggestedName = dot > 0 ? `${file.name.slice(0, dot)} copy${file.name.slice(dot)}` : `${file.name} copy`;
+    const newName = window.prompt("Name of the copied item", suggestedName);
+    if (!newName?.trim()) return;
+    setBusy(true);
+    try {
+      await api("/api/files/copy", json({ accountID, path: file.path, destination: target, name: newName.trim() }));
+      await refreshFiles();
+      setMessage(`Copied ${file.name} to ${target}.`);
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
   const remove = async (file: CloudFile) => {
     if (!window.confirm(`Delete "${file.name}" from TeraBox?`)) return;
     setBusy(true);
@@ -301,7 +324,7 @@ export default function WebApp() {
               {filtered.map(file => <div className="file-row" key={file.id}>
                 <span><button className="file-name" disabled={!file.isDirectory} onClick={() => setCurrentPath(file.path)}><span className="file-icon">{file.isDirectory ? "▰" : "▤"}</span>{file.name}</button></span>
                 <span>{file.isDirectory ? "—" : bytes(file.size)}</span><span>{file.isDirectory ? "Folder" : "File"}</span>
-                <span className="row-actions">{!file.isDirectory && <button className="text-button" disabled={busy} onClick={() => void download(file)}>Download</button>}<button className="text-button" disabled={busy} onClick={() => void rename(file)}>Rename</button><button className="text-button" disabled={busy} onClick={() => void move(file)}>Move</button><button className="text-button danger-text" disabled={busy} onClick={() => void remove(file)}>Delete</button></span>
+                <span className="row-actions">{!file.isDirectory && <button className="text-button" disabled={busy} onClick={() => void download(file)}>Download</button>}<button className="text-button" disabled={busy} onClick={() => void rename(file)}>Rename</button><button className="text-button" disabled={busy} onClick={() => void move(file)}>Move</button><button className="text-button" disabled={busy} onClick={() => void copy(file)}>Copy</button><button className="text-button danger-text" disabled={busy} onClick={() => void remove(file)}>Delete</button></span>
               </div>)}
             </div> : <div className="empty compact"><h3>{busy ? "Loading…" : "This folder is empty"}</h3><p>Upload files or open another folder.</p></div>}
             {nextPageToken && <div className="load-more"><button className="secondary" disabled={busy} onClick={() => void loadMoreFiles()}>{busy ? "Loading…" : "Load more files"}</button></div>}
