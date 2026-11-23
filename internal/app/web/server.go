@@ -239,23 +239,27 @@ func (s *Server) transfers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 	var req fileOperationRequest
 	if err := decodeJSON(w,r,&req); err != nil { writeError(w,err); return }
-	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	if err := validateFileName(req.Name); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := api.Rename(r.Context(),req.Path,req.Name); err != nil { writeError(w,err); return }; w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	var req fileOperationRequest
 	if err := decodeJSON(w,r,&req); err != nil { writeError(w,err); return }
-	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := api.DeletePath(r.Context(),req.Path); err != nil { writeError(w,err); return }; w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) moveFile(w http.ResponseWriter, r *http.Request) {
 	var req fileOperationRequest
 	if err := decodeJSON(w,r,&req); err != nil { writeError(w,err); return }
-	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
 	if err := s.validateCloudPath(req.Destination); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	if req.Name != "" {
+		if err := validateFileName(req.Name); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	}
+	api,err := s.service.NewAPIClient(r.Context(),req.AccountID); if err != nil { writeError(w,err); return }
 	if err := api.Move(r.Context(),req.Path,req.Destination,req.Name); err != nil { writeError(w,err); return }; w.WriteHeader(http.StatusNoContent)
 }
 type fileOperationRequest struct {
