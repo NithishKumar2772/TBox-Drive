@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
-	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
-	"github.com/NithishKumar2772/TBox-Drive/internal/core/provider"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
@@ -269,7 +267,3 @@ func (s *Server) ListenAndServe(ctx context.Context, address string) error {
 	}
 }
 
-// Keep account.Account in this package's public API documentation without
-// exposing credential references in HTTP responses.
-var _ = account.Account{}
-var _ provider.File
