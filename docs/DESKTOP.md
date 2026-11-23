@@ -19,7 +19,7 @@ cd ..
 go build -tags desktop -o dist/TBoxDrive.exe ./cmd/tboxdrive-desktop
 ```
 
-The Vite build writes embedded assets to `internal/app/web/dist`. The Windows CI job compiles the desktop executable and publishes it as a workflow artifact.
+The Vite build writes embedded assets to `internal/app/web/dist`. The Windows CI job compiles the desktop executable and publishes it as a workflow artifact. The executable uses the WinFsp Go binding; users must install the WinFsp runtime separately before mounting a drive.
 
 ## TeraBox application configuration
 
@@ -36,12 +36,30 @@ User access and refresh tokens are stored in the OS credential vault. SQLite sto
 
 ## Current desktop features
 
-- TeraBox QR/device authorization
-- Account selection and disconnection
-- File/folder listing
+- TeraBox QR/device authorization and account selection/disconnection
+- File browsing, current-folder search, category filters and paginated listing
 - Storage quota display
-- File upload with progress events
-- File download with save dialog
+- Multi-file upload with progress events and per-file error reporting
+- File download, rename and delete
 - Transfer history
+- System/light/dark appearance selection
+- Windows virtual-drive mount/unmount controls
 
-Folder creation/rename/delete, pause/resume controls, multi-provider account management and cross-cloud transfer remain future work.
+## Windows virtual-drive prototype
+
+The Windows build uses WinFsp to expose the configured TeraBox application folder as a drive letter. The first prototype:
+- Lists remote folders and files in File Explorer.
+- Downloads a file into the local cache when an application opens it.
+- Reuses cached file content when its metadata-derived cache key is unchanged.
+- Uploads edited/new files when the file handle is flushed or closed.
+- Supports remote rename, move and delete operations through the documented Open Platform file-manager API.
+- Prevents deleting or renaming the application root.
+
+Limitations:
+- This is on-demand whole-file hydration, not byte-range streaming.
+- Folder creation is disabled because the documented Open Platform file-manager API does not currently expose a verified directory-create operation.
+- The mount is tied to the selected account for the lifetime of the mount.
+- Install WinFsp before mounting. The mountpoint must be an available drive letter such as `T:`.
+- Test with non-critical files first; live TeraBox integration has not yet been validated with the user's account.
+
+Folder-tree upload, robust offline sync/conflict resolution, pinning, cache eviction controls and background reconnect remain in development.
