@@ -69,6 +69,7 @@ export default function App() {
   const [progress, setProgress] = useState<TransferProgress | null>(null);
   const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
   const autoRefreshInFlight = useRef(false);
+  const fileRequestGeneration = useRef(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(() => window.localStorage.getItem("tbox-auto-refresh") !== "false");
   const [autoUpdateCheck, setAutoUpdateCheck] = useState(() => window.localStorage.getItem("tbox-auto-update-check") !== "false");
@@ -95,27 +96,40 @@ export default function App() {
   const refreshFiles = useCallback(async (id = accountID, folder = currentPath) => {
     const api = desktop();
     if (!api || !id) return;
+    const generation = ++fileRequestGeneration.current;
     setBusy(true);
     try {
       const page = await api.ListFiles(id, folder, "");
+      if (generation !== fileRequestGeneration.current) return;
       setFiles(page.files ?? []);
       setNextPageToken(page.nextPageToken ?? "");
       const q = await api.GetStorageQuota(id);
-      setQuota(q);
-    } catch (e) { setMessage(String(e)); }
-    finally { setBusy(false); }
+      if (generation === fileRequestGeneration.current) setQuota(q);
+    } catch (e) {
+      if (generation === fileRequestGeneration.current) setMessage(String(e));
+    } finally {
+      if (generation === fileRequestGeneration.current) setBusy(false);
+    }
   }, [accountID, currentPath]);
 
   const loadMoreFiles = async () => {
     const api = desktop();
     if (!api || !accountID || !nextPageToken || busy) return;
+    const generation = fileRequestGeneration.current;
+    const requestedAccount = accountID;
+    const requestedPath = currentPath;
+    const requestedToken = nextPageToken;
     setBusy(true);
     try {
-      const page = await api.ListFiles(accountID, currentPath, nextPageToken);
+      const page = await api.ListFiles(requestedAccount, requestedPath, requestedToken);
+      if (generation !== fileRequestGeneration.current || requestedAccount !== accountID || requestedPath !== currentPath) return;
       setFiles(previous => [...previous, ...(page.files ?? [])]);
       setNextPageToken(page.nextPageToken ?? "");
-    } catch (e) { setMessage(String(e)); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (generation === fileRequestGeneration.current) setMessage(String(e));
+    } finally {
+      if (generation === fileRequestGeneration.current) setBusy(false);
+    }
   };
 
   const refreshTransfers = useCallback(async () => {
@@ -147,7 +161,7 @@ export default function App() {
     return () => off?.();
   }, []);
 
-  useEffect(() => { if (accountID) refreshFiles(accountID, currentPath); }, [accountID, currentPath, refreshFiles]);
+  useEffect(() => { fileRequestGeneration.current++; setFiles([]); setNextPageToken(""); setQuota(null); if (accountID) void refreshFiles(accountID, currentPath); else setBusy(false); }, [accountID, currentPath, refreshFiles]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: light)");
     const applyTheme = () => {
