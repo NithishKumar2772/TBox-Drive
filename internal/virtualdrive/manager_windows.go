@@ -222,9 +222,8 @@ func (fs *cloudFileSystem) ensureCached(item provider.File) (string, error) {
 	if item.Size > 0 && written != item.Size { return "", fmt.Errorf("download size mismatch: expected %d bytes, received %d", item.Size, written) }
 	if err := tmp.Sync(); err != nil { return "", err }
 	if err := tmp.Close(); err != nil { return "", err }
-	if err := os.Rename(tmpName, local); err != nil {
-		if _, statErr := os.Stat(local); statErr != nil { return "", err }
-	}
+	if err := os.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) { return "", err }
+	if err := os.Rename(tmpName, local); err != nil { return "", err }
 	ok = true
 	return local, nil
 }
