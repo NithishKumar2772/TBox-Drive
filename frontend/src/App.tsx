@@ -124,7 +124,8 @@ export default function App() {
       setAccounts(list);
       if (list.length) setAccountID(list[0].id);
     }).catch(e => setMessage(String(e)));
-    if (window.localStorage.getItem("tbox-auto-update-check") !== "false") { void api.CheckForUpdates().then(setUpdateInfo).catch(() => undefined); }\n    const off = window.runtime?.EventsOn("transfer-progress", payload => {
+    if (window.localStorage.getItem("tbox-auto-update-check") !== "false") { void api.CheckForUpdates().then(setUpdateInfo).catch(() => undefined); }
+    const off = window.runtime?.EventsOn("transfer-progress", payload => {
       const now = Date.now();
       const previous = lastProgress.current;
       const elapsed = previous && previous.id === payload.transferId ? Math.max(0.001, (now - previous.at) / 1000) : 0;
@@ -326,7 +327,7 @@ export default function App() {
         <header>
           <div><p className="eyebrow">CLOUD WORKSPACE</p><h1>{({home:"Home",files:"My Files",pictures:"Pictures",documents:"Documents",archives:"ZIP",videos:"Videos",music:"Music",transfers:"Transfers",drive:"Virtual Drive",settings:"Settings"} as Record<string,string>)[activeView]}</h1></div>
           <div className="header-actions">
-            {accountID && !["transfers", "drive"].includes(activeView) && <button onClick={upload} disabled={busy}>Upload files</button>}
+            {accountID && !["transfers", "drive", "settings"].includes(activeView) && <button onClick={upload} disabled={busy}>Upload files</button>}
             <button className="secondary" onClick={() => setTheme(value => value === "system" ? "light" : value === "light" ? "dark" : "system")} aria-label="Change appearance">Theme: {theme}</button>
             {!accounts.length && <button onClick={connect} disabled={busy || !status?.ready}>Connect TeraBox</button>}
             <div className="profile-menu">
@@ -403,7 +404,7 @@ export default function App() {
           <article className="panel settings-panel">
             <p className="eyebrow">SECURITY</p><h2>Encryption and password protection</h2>
             <div className="security-callout"><strong>Per-file encryption</strong><span>Planned: choose encryption on each upload, set a file password and optional hint, then enter the password when opening the file.</span></div>
-            <div className="settings-row"><div><strong>Change encryption password</strong><small>Re-protect file keys without re-uploading the entire file</small></div><badge className="not-available">Not available yet</badge></div>
+            <div className="settings-row"><div><strong>Change encryption password</strong><small>Re-protect file keys without re-uploading the entire file</small></div><span className="not-available">Not available yet</span></div>
             <div className="settings-row"><div><strong>Forgot password / recovery key</strong><small>Recover encrypted files using a separately saved recovery key</small></div><badge className="not-available">Not available yet</badge></div>
             <div className="security-note">Encryption is not active in this build. Existing uploads are not encrypted by TBox Drive. The password and recovery workflow will be enabled only after the local encryption engine and recovery tests are complete.</div>
           </article>
