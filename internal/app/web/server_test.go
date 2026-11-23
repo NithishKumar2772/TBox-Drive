@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-
-	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
 	"testing"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
