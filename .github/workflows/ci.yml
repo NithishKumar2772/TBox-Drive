@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+      - name: Download Go modules
+        run: go mod download
       - name: Format Go sources
         run: find ./cmd ./internal -name '*.go' -print0 | xargs -0 gofmt -w
       - name: Verify module files
