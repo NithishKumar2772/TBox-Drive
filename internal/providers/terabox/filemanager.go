@@ -68,7 +68,7 @@ func (c *APIClient) isApplicationRoot(remotePath string) bool {
 
 func validateCloudName(name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00\r\n") {
 		return errors.New("name must be a non-empty filename without path separators")
 	}
 	return nil
