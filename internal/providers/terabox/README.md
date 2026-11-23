@@ -1,3 +1,10 @@
 # TeraBox adapter
 
-This is an integration boundary, not a working client yet. Verify current authentication, permitted API access, session lifecycle, file listing pagination, upload limits, part sizing, concurrency, retry/finalization, download range support and rate limits before implementation. Record source URLs, date checked, test evidence and limitations. Never bypass access controls or anti-abuse measures.
+The adapter now has an official OAuth client and an initial Open Platform API client for:
+- Device QR authorization, code exchange, token info and refresh
+- Paginated file listing
+- Storage quota lookup
+
+The provider adapter can expose directory listing after it is constructed with a configured API client. Upload, download, folder creation, rename and delete are not yet implemented.
+
+All real account tests require an approved TeraBox Open Platform application and a dedicated authorized test account. Do not use reverse-engineered PCS/NDUS sessions as a substitute for the official OAuth contract.
