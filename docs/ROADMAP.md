@@ -1,39 +1,36 @@
-# Roadmap
+# TBox Drive roadmap — TeraBox only
 
 ## M0 Foundation
 - [x] Repository conventions and documentation
-- [x] Provider interface skeleton
-- [x] Chunk planner and tests
-- [ ] Durable database and transfer repository
-- [ ] CI verification
+- [x] Go application skeleton
+- [x] Initial React dashboard
 
-## M1 TeraBox discovery/authentication
-- [ ] Verify permitted current authentication flow
-- [ ] Secure credential storage and session validation
-- [ ] Account profile
+## M1 Transfer engine foundation
+- [x] Overflow-safe chunk planner with allocation limit
+- [x] File-range streaming reader
+- [x] Bounded worker pool and cancellation
+- [x] Retry policy with capped exponential backoff and jitter
+- [x] Durable local part journal
+- [ ] Go tests and vet verified in CI
+- [ ] Source-file identity validation and remote session reconciliation
 
-## M2 File operations
-- [ ] Paginated listing and metadata
-- [ ] Folder operations
-- [ ] Error mapping
+## M2 TeraBox account and file access
+- [ ] Verify permitted current authentication/API flow
+- [ ] Secure session storage and validation
+- [ ] Account profile and paginated file listing
+- [ ] Folder and metadata operations
 
-## M3 Transfer engine
-- [ ] Verified multipart upload
-- [ ] Durable part journal
-- [ ] Bounded concurrency and retry/backoff
-- [ ] Pause/resume and crash recovery
+## M3 Real TeraBox transfers
+- [ ] Verify upload session/part/finalize protocol
+- [ ] Implement resumable multipart upload adapter
+- [ ] Reconcile remote parts on restart
 - [ ] Streaming download and integrity verification
+- [ ] Authorized live integration tests
 
-## M4 Desktop
-- [ ] Wails integration
-- [ ] React explorer and transfer dashboard
+## M4 Desktop application
+- [ ] Wails shell and backend bindings
+- [ ] TeraBox file explorer
+- [ ] Upload/download queue and settings
+- [ ] Installers and release workflow
 
-## M5 Multi-cloud
-- [ ] Provider conformance suite
-- [ ] Google Drive, OneDrive, Dropbox, S3 and WebDAV as separate milestones
-
-## M6 Advanced
-- [ ] Cloud-to-cloud transfer
-- [ ] Sync and backup
-- [ ] Virtual drive
-- [ ] Mobile clients
+No other cloud providers, multi-cloud abstractions, cloud-to-cloud transfers or virtual-drive features are in scope.

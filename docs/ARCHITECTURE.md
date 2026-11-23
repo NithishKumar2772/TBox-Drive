@@ -1,12 +1,12 @@
-# Architecture
+# TBox Drive architecture — TeraBox only
 
-TBox Drive is a provider-neutral application with a TeraBox-first adapter.
+TBox Drive is a single-provider application. TeraBox protocol logic lives in internal/providers/terabox; the Go transfer engine supplies streaming, chunk scheduling, retry, cancellation and durable local progress.
 
-## Layers
-1. UI clients: Wails desktop initially; mobile/web later.
-2. Application services: accounts, explorer, transfer lifecycle and settings.
-3. Core engines: planning, bounded workers, retry, persistence and integrity.
-4. Provider interface: stable common operations and explicit capability flags.
-5. Provider adapters: authentication and protocol-specific behaviour.
+## Components
+1. React UI: account, file browser, transfer queue and settings.
+2. Go application services: authentication/session lifecycle, file operations and transfer orchestration.
+3. Transfer engine: chunk plan, range reader, bounded workers, retry and local journal.
+4. TeraBox adapter: verified service-specific requests and response parsing.
+5. Local state: credential-vault references and durable transfer metadata.
 
-Core packages must not import provider implementations. The application composition root wires adapters into services. Completion requires provider finalization and remote verification. Virtual drive and other providers are deferred until TeraBox basics and transfer reliability are proven.
+No multi-cloud provider registry or other provider adapters are part of this product. A transfer is complete only after TeraBox finalization and remote verification.
