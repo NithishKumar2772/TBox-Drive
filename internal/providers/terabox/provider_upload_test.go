@@ -22,7 +22,7 @@ func TestAdapterUploadUsesCallerTransferID(t *testing.T) {
 	defer server.Close()
 	local:=filepath.Join(t.TempDir(),"file.txt")
 	if err:=os.WriteFile(local,[]byte("x"),0600);err!=nil{t.Fatal(err)}
-	api, err := newTestAPI(&httptest.Server{URL: server.URL, Client: server.Client()})
+	api, err := newAPIClientWithTestDomains(APIConfig{AccessToken: "test", TokenInfo: TokenInfo{APIDomain: server.URL, UploadDomain: server.URL}, ApplicationRoot: "/From: Other Applications/TBox-Drive-123", HTTPClient: server.Client()})
 	if err!=nil{t.Fatal(err)}
 	store,err:=sqlite.Open(":memory:");if err!=nil{t.Fatal(err)};defer store.Close()
 	adapter:=NewConnectedWithRepository(api,store)
