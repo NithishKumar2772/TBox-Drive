@@ -17,7 +17,10 @@ type File struct {
 }
 
 type UploadRequest struct { LocalPath, ParentID, Name string; Size int64 }
-type UploadResult struct { File File }
+type UploadResult struct {
+	File File
+	TaskID string
+}
 
 // Provider defines the common provider-neutral operations.
 type Provider interface {

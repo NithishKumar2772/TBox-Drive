@@ -14,23 +14,21 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
+	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
 
 func TestPlanTeraBoxChunks(t *testing.T){
 	chunks,err:=PlanTeraBoxChunks(10<<20,8<<20);if err!=nil{t.Fatal(err)}
 	if len(chunks)!=2{t.Fatalf("want 2 chunks, got %d",len(chunks))}
-	var total int64
-	for _,c:=range chunks{if c.Size<=4<<20{t.Fatalf("part is not larger than 4 MiB: %d",c.Size)};total+=c.Size}
+	var total int64;for _,c:=range chunks{if c.Size<=4<<20{t.Fatalf("part is not larger than 4 MiB: %d",c.Size)};total+=c.Size}
 	if total!=10<<20{t.Fatalf("got total %d",total)}
 }
-func TestPlanTeraBoxChunksAvoidsSmallTail(t *testing.T){
-	chunks,err:=PlanTeraBoxChunks((8<<20)+1,8<<20);if err!=nil{t.Fatal(err)}
-	if len(chunks)!=1||chunks[0].Size!=(8<<20)+1{t.Fatalf("unexpected chunks: %#v",chunks)}
-}
-func TestPlanTeraBoxChunksRejectsEmpty(t *testing.T){
-	if _,err:=PlanTeraBoxChunks(0,8<<20);err==nil{t.Fatal("expected empty file rejection")}
-}
-func TestUploadFileStreamsPartsAndFinalizes(t *testing.T){
+func TestPlanTeraBoxChunksAvoidsSmallTail(t *testing.T){chunks,err:=PlanTeraBoxChunks((8<<20)+1,8<<20);if err!=nil{t.Fatal(err)};if len(chunks)!=1||chunks[0].Size!=(8<<20)+1{t.Fatalf("unexpected chunks: %#v",chunks)}}
+func TestPlanTeraBoxChunksRejectsEmpty(t *testing.T){if _,err:=PlanTeraBoxChunks(0,8<<20);err==nil{t.Fatal("expected empty file rejection")}}
+
+func TestUploadFilePersistsTransferAndParts(t *testing.T){
 	var mu sync.Mutex
 	uploaded:=map[int]string{}
 	var blockList string
@@ -57,15 +55,19 @@ func TestUploadFileStreamsPartsAndFinalizes(t *testing.T){
 		}
 	}))
 	defer server.Close()
-	dir:=t.TempDir();local:=path.Join(dir,"big.bin")
-	data:=make([]byte,10<<20);for i:=range data{data[i]=byte(i%251)}
+	local:=path.Join(t.TempDir(),"big.bin");data:=make([]byte,10<<20);for i:=range data{data[i]=byte(i%251)}
 	if err:=os.WriteFile(local,data,0600);err!=nil{t.Fatal(err)}
-	api,err:=NewAPIClient(APIConfig{AccessToken:"test",TokenInfo:TokenInfo{APIDomain:server.URL,UploadDomain:server.URL},ApplicationRoot:"/From: Other Applications/TBox-Drive-123"})
-	if err!=nil{t.Fatal(err)}
+	api,err:=NewAPIClient(APIConfig{AccessToken:"test",TokenInfo:TokenInfo{APIDomain:server.URL,UploadDomain:server.URL},ApplicationRoot:"/From: Other Applications/TBox-Drive-123"});if err!=nil{t.Fatal(err)}
+	store,err:=sqlite.Open(":memory:");if err!=nil{t.Fatal(err)};defer store.Close()
 	var progress int64
-	result,err:=api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/big.bin",UploadOptions{ChunkSize:8<<20,OnProgress:func(n,total int64){progress=n}})
+	result,err:=api.UploadFile(context.Background(),local,"/From: Other Applications/TBox-Drive-123/big.bin",UploadOptions{ChunkSize:8<<20,OnProgress:func(n,total int64){progress=n},Repository:store,TransferID:"task-upload-1"})
 	if err!=nil{t.Fatal(err)}
+	if result.TaskID!="task-upload-1"{t.Fatalf("task ID %q",result.TaskID)}
 	if result.File.ID!="987"||result.File.Name!="big.bin"||result.File.Size!=10<<20{t.Fatalf("unexpected result: %#v",result.File)}
 	if len(uploaded)!=2||progress!=10<<20{t.Fatalf("uploaded=%v progress=%d",uploaded,progress)}
 	if !strings.HasPrefix(blockList,"[")||!strings.HasSuffix(blockList,"]"){t.Fatalf("invalid block list %q",blockList)}
+	task,err:=store.GetTransfer(context.Background(),"task-upload-1");if err!=nil{t.Fatal(err)}
+	if task.Status!=transfer.StatusCompleted||task.Transferred!=10<<20{t.Fatalf("persisted task: %#v",task)}
+	parts,err:=store.ListParts(context.Background(),"task-upload-1");if err!=nil{t.Fatal(err)}
+	if len(parts)!=2||parts[0].Status!="completed"||parts[1].Status!="completed"{t.Fatalf("persisted parts: %#v",parts)}
 }

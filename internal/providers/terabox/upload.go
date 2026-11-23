@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,8 +18,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/provider"
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 )
 
 const (
@@ -27,7 +31,13 @@ const (
 	maxTeraBoxParts = 1_000_000
 )
 type uploadPart struct { Index int; Offset,Size int64 }
-type UploadOptions struct { ChunkSize int64; RenamePolicy *int; OnProgress func(transferred,total int64) }
+type UploadOptions struct {
+	ChunkSize int64
+	RenamePolicy *int
+	OnProgress func(transferred,total int64)
+	Repository transfer.Repository
+	TransferID string
+}
 type precreateResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;UploadID string `json:"uploadid"`;ReturnType int `json:"return_type"`;BlockList []int `json:"block_list"`;Info apiFile `json:"info"` }
 type partResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;MD5 string `json:"md5"`;UploadID string `json:"uploadid"`;PartSeq int `json:"partseq"` }
 type createResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;FSID uint64 `json:"fs_id"`;Path string `json:"path"`;Name string `json:"server_filename"`;Size uint64 `json:"size"`;IsDir int `json:"isdir"`;Modified uint64 `json:"mtime"` }
@@ -45,36 +55,79 @@ func PlanTeraBoxChunks(fileSize,preferredSize int64)([]uploadPart,error){
 	return chunks,nil
 }
 
-// UploadFile streams shards from disk, verifies each returned MD5 and finalizes
-// only after all missing shard indexes from precreate have been uploaded.
-func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,options UploadOptions)(provider.UploadResult,error){
-	if err:=c.validateRemotePath(remotePath);err!=nil{return provider.UploadResult{},err}
+func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,options UploadOptions)(result provider.UploadResult,err error){
+	if err=c.validateRemotePath(remotePath);err!=nil{return provider.UploadResult{},err}
 	chunkSize:=options.ChunkSize;if chunkSize==0{chunkSize=DefaultUploadChunkSize}
-	file,err:=os.Open(localPath);if err!=nil{return provider.UploadResult{},fmt.Errorf("open upload source: %w",err)};defer file.Close()
-	stat,err:=file.Stat();if err!=nil{return provider.UploadResult{},fmt.Errorf("stat upload source: %w",err)}
+	file,openErr:=os.Open(localPath);if openErr!=nil{return provider.UploadResult{},fmt.Errorf("open upload source: %w",openErr)};defer file.Close()
+	stat,statErr:=file.Stat();if statErr!=nil{return provider.UploadResult{},fmt.Errorf("stat upload source: %w",statErr)}
 	if !stat.Mode().IsRegular(){return provider.UploadResult{},errors.New("upload source must be a regular file")}
-	chunks,err:=PlanTeraBoxChunks(stat.Size(),chunkSize);if err!=nil{return provider.UploadResult{},err}
+	chunks,planErr:=PlanTeraBoxChunks(stat.Size(),chunkSize);if planErr!=nil{return provider.UploadResult{},planErr}
+
+	taskID:=options.TransferID
+	if taskID==""{var idErr error;taskID,idErr=newTransferID();if idErr!=nil{return provider.UploadResult{},idErr}}
+	result.TaskID=taskID
+	repo:=options.Repository
+	persisted:=false
+	transferred:=int64(0)
+	if repo!=nil{
+		existing,getErr:=repo.GetTransfer(ctx,taskID)
+		if errors.Is(getErr,sql.ErrNoRows){
+			createErr:=repo.CreateTransfer(ctx,transfer.Task{ID:taskID,ProviderID:"terabox",Direction:"upload",Source:localPath,Destination:remotePath,Size:stat.Size(),Status:transfer.StatusQueued})
+			if createErr!=nil{return provider.UploadResult{},fmt.Errorf("create TeraBox transfer record: %w",createErr)}
+		}else if getErr!=nil{return provider.UploadResult{},fmt.Errorf("load TeraBox transfer record: %w",getErr)
+		}else if existing.ProviderID!="terabox"||existing.Direction!="upload"||existing.Source!=localPath||existing.Destination!=remotePath||existing.Size!=stat.Size(){
+			return provider.UploadResult{},errors.New("transfer ID belongs to a different TeraBox upload")
+		}
+		persisted=true
+		defer func(){
+			status:=transfer.StatusFailed;message:="upload failed"
+			if err==nil{status=transfer.StatusCompleted;transferred=stat.Size();message=""}else if errors.Is(err,context.Canceled){status=transfer.StatusCanceled;message="upload canceled"}
+			_ = repo.UpdateProgress(context.Background(),taskID,transferred,status,message)
+		}()
+		if err=repo.UpdateProgress(ctx,taskID,0,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},fmt.Errorf("start TeraBox transfer record: %w",err)}
+	}
+	_ = persisted
+
 	blockMD5:=make([]string,len(chunks))
-	for i,ch:=range chunks{if err:=ctx.Err();err!=nil{return provider.UploadResult{},err};h:=md5.New();if _,err:=io.Copy(h,io.NewSectionReader(file,ch.Offset,ch.Size));err!=nil{return provider.UploadResult{},fmt.Errorf("hash upload part %d: %w",i,err)};blockMD5[i]=hex.EncodeToString(h.Sum(nil))}
+	for i,ch:=range chunks{if err=ctx.Err();err!=nil{return provider.UploadResult{},err};h:=md5.New();if _,err=io.Copy(h,io.NewSectionReader(file,ch.Offset,ch.Size));err!=nil{return provider.UploadResult{},fmt.Errorf("hash upload part %d: %w",i,err)};blockMD5[i]=hex.EncodeToString(h.Sum(nil))}
+	if err=ensureUploadSourceUnchanged(localPath,file,stat);err!=nil{return provider.UploadResult{},err}
 	blockJSON,_:=json.Marshal(blockMD5)
-	pre,err:=c.precreate(ctx,remotePath,string(blockJSON));if err!=nil{return provider.UploadResult{},err}
-	if pre.ReturnType==2{return provider.UploadResult{File:provider.File{ID:strconv.FormatUint(pre.Info.FSID,10),Name:pathBase(pre.Info.Path),Path:pre.Info.Path,Size:int64(pre.Info.Size),IsDirectory:pre.Info.IsDir==1}},nil}
+	pre,preErr:=c.precreate(ctx,remotePath,string(blockJSON));if preErr!=nil{return provider.UploadResult{},preErr}
+	if pre.ReturnType==2{result.File=provider.File{ID:strconv.FormatUint(pre.Info.FSID,10),Name:pathBase(pre.Info.Path),Path:pre.Info.Path,Size:int64(pre.Info.Size),IsDirectory:pre.Info.IsDir==1};transferred=stat.Size();return result,nil}
 	if pre.UploadID==""{return provider.UploadResult{},errors.New("TeraBox precreate response omitted upload ID")}
+	if repo!=nil{if err=repo.SaveProviderSession(ctx,taskID,pre.UploadID,nil);err!=nil{return provider.UploadResult{},fmt.Errorf("save TeraBox upload session: %w",err)}}
 	missing:=pre.BlockList;if len(missing)==0{missing=[]int{0}}
 	missingSet:=make(map[int]struct{},len(missing));var remaining int64
 	for _,index:=range missing{if index<0||index>=len(chunks){return provider.UploadResult{},fmt.Errorf("TeraBox requested invalid part index %d",index)};if _,ok:=missingSet[index];ok{return provider.UploadResult{},fmt.Errorf("TeraBox returned duplicate part index %d",index)};missingSet[index]=struct{}{};remaining+=chunks[index].Size}
-	transferred:=stat.Size()-remaining
+	transferred=stat.Size()-remaining
+	for _,part:=range chunks{if _,isMissing:=missingSet[part.Index];!isMissing&&repo!=nil{if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:part.Index,Offset:part.Offset,Size:part.Size,Checksum:blockMD5[part.Index],Status:"completed"});err!=nil{return provider.UploadResult{},fmt.Errorf("persist completed TeraBox part %d: %w",part.Index,err)}}}
+	if repo!=nil{if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},err}}
 	if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
-	for _,index:=range missing{if err:=ctx.Err();err!=nil{return provider.UploadResult{},err}
-		part:=chunks[index];got,err:=c.uploadPart(ctx,file,remotePath,pre.UploadID,part);if err!=nil{return provider.UploadResult{},fmt.Errorf("upload part %d: %w",index,err)}
+	for _,index:=range missing{if err=ctx.Err();err!=nil{return provider.UploadResult{},err}
+		part:=chunks[index];got,partErr:=c.uploadPart(ctx,file,remotePath,pre.UploadID,part);if partErr!=nil{return provider.UploadResult{},fmt.Errorf("upload part %d: %w",index,partErr)}
 		if !strings.EqualFold(got,blockMD5[index]){return provider.UploadResult{},fmt.Errorf("TeraBox part %d checksum mismatch",index)}
-		transferred+=part.Size;if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
+		transferred+=part.Size
+		if repo!=nil{
+			if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:index,Offset:part.Offset,Size:part.Size,Checksum:got,RemotePartID:strconv.Itoa(index),Status:"completed"});err!=nil{return provider.UploadResult{},fmt.Errorf("persist TeraBox part %d: %w",index,err)}
+			if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},fmt.Errorf("persist TeraBox progress: %w",err)}
+		}
+		if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
 	}
+	if err=ensureUploadSourceUnchanged(localPath,file,stat);err!=nil{return provider.UploadResult{},err}
+	if repo!=nil{if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusFinalizing,"");err!=nil{return provider.UploadResult{},err}}
 	rtype:=1;if options.RenamePolicy!=nil{rtype=*options.RenamePolicy}
-	created,err:=c.createFile(ctx,remotePath,stat.Size(),pre.UploadID,string(blockJSON),rtype);if err!=nil{return provider.UploadResult{},err}
+	created,createErr:=c.createFile(ctx,remotePath,stat.Size(),pre.UploadID,string(blockJSON),rtype);if createErr!=nil{return provider.UploadResult{},createErr}
 	if created.FSID==0{return provider.UploadResult{},errors.New("TeraBox create response omitted file ID")}
 	name:=created.Name;if name==""{name=pathBase(created.Path)}
-	return provider.UploadResult{File:provider.File{ID:strconv.FormatUint(created.FSID,10),Name:name,Path:created.Path,Size:int64(created.Size),IsDirectory:created.IsDir==1}},nil
+	result.File=provider.File{ID:strconv.FormatUint(created.FSID,10),Name:name,Path:created.Path,Size:int64(created.Size),IsDirectory:created.IsDir==1}
+	return result,nil
+}
+func newTransferID()(string,error){var b [16]byte;if _,err:=rand.Read(b[:]);err!=nil{return "",fmt.Errorf("generate transfer ID: %w",err)};return hex.EncodeToString(b[:]),nil}
+func ensureUploadSourceUnchanged(path string,file *os.File,initial os.FileInfo)error{
+	current,err:=file.Stat();if err!=nil{return fmt.Errorf("recheck upload source: %w",err)}
+	pathInfo,err:=os.Stat(path);if err!=nil{return fmt.Errorf("recheck upload source path: %w",err)}
+	if !os.SameFile(initial,pathInfo)||current.Size()!=initial.Size()||!current.ModTime().Equal(initial.ModTime())||pathInfo.Size()!=initial.Size()||!pathInfo.ModTime().Equal(initial.ModTime()){return errors.New("upload source changed during transfer; refusing to finalize")}
+	return nil
 }
 func(c *APIClient)precreate(ctx context.Context,remotePath,blockJSON string)(precreateResponse,error){
 	q:=url.Values{"access_tokens":{c.accessToken}};form:=url.Values{"path":{remotePath},"autoinit":{"1"},"block_list":{blockJSON}}
