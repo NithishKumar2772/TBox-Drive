@@ -23,6 +23,7 @@ declare global {
       RenameFile: (accountID: string, remotePath: string, newName: string) => Promise<void>;
       DeleteFile: (accountID: string, remotePath: string) => Promise<void>;
       MoveFile: (accountID: string, remotePath: string, destinationDir: string, newName: string) => Promise<void>;
+      CopyFile: (accountID: string, remotePath: string, destinationDir: string, newName: string) => Promise<void>;
       ListFiles: (accountID: string, parentPath: string, pageToken: string) => Promise<FilePage>;
       GetStorageQuota: (accountID: string) => Promise<Quota>;
       SelectUploadFile: () => Promise<string>;
@@ -306,6 +307,30 @@ export default function App() {
     finally { setBusy(false); }
   };
 
+  const copy = async (file: CloudFile) => {
+    const api = desktop();
+    if (!api || !accountID || busy) return;
+    const destination = window.prompt("Copy to folder path inside your TBox Drive application folder", status?.applicationRoot || "");
+    if (!destination?.trim()) return;
+    const target = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
+    const source = file.path.replace(/\/$/, "");
+    if (target === source || target.startsWith(source + "/")) {
+      setMessage("A folder cannot be copied into itself or one of its descendants.");
+      return;
+    }
+    const dot = file.name.lastIndexOf(".");
+    const suggestedName = dot > 0 ? `${file.name.slice(0, dot)} copy${file.name.slice(dot)}` : `${file.name} copy`;
+    const newName = window.prompt("Name of the copied item", suggestedName);
+    if (!newName?.trim()) return;
+    setBusy(true);
+    try {
+      await api.CopyFile(accountID, file.path, target, newName.trim());
+      setMessage(`Copied ${file.name} to ${target}.`);
+      await refreshFiles();
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
   const remove = async (file: CloudFile) => {
     const api = desktop();
     if (!api || !accountID || !window.confirm(`Delete "${file.name}" from TeraBox?`)) return;
@@ -448,6 +473,7 @@ export default function App() {
                     {!file.isDirectory && <button className="text-button" onClick={() => download(file)} disabled={busy}>Download</button>}
                     <button className="text-button" onClick={() => rename(file)} disabled={busy}>Rename</button>
                     <button className="text-button" onClick={() => move(file)} disabled={busy}>Move</button>
+                    <button className="text-button" onClick={() => copy(file)} disabled={busy}>Copy</button>
                     <button className="text-button danger-text" onClick={() => remove(file)} disabled={busy}>Delete</button>
                   </span>
                 </div>)}
