@@ -257,6 +257,10 @@ func (s *Server) moveFile(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w,r,&req); err != nil { writeError(w,err); return }
 	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
 	if err := s.validateCloudPath(req.Destination); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
+	if isSameOrDescendantPath(req.Destination, req.Path) {
+		http.Error(w, "destination cannot be the source folder or one of its descendants", http.StatusBadRequest)
+		return
+	}
 	if req.Name != "" {
 		if err := validateFileName(req.Name); err != nil { http.Error(w,err.Error(),http.StatusBadRequest); return }
 	}
@@ -268,6 +272,10 @@ func (s *Server) copyFile(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &req); err != nil { writeError(w, err); return }
 	if err := s.validateCloudPath(req.Path); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
 	if err := s.validateCloudPath(req.Destination); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	if isSameOrDescendantPath(req.Destination, req.Path) {
+		http.Error(w, "destination cannot be the source folder or one of its descendants", http.StatusBadRequest)
+		return
+	}
 	if req.Name != "" {
 		if err := validateFileName(req.Name); err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
 	}
@@ -282,6 +290,12 @@ type fileOperationRequest struct {
 	Name string `json:"name"`
 	Destination string `json:"destination"`
 }
+func isSameOrDescendantPath(candidate, parent string) bool {
+	cleanCandidate := path.Clean(candidate)
+	cleanParent := path.Clean(parent)
+	return cleanCandidate == cleanParent || strings.HasPrefix(cleanCandidate, cleanParent+"/")
+}
+
 func (s *Server) validateCloudPath(value string) error {
 	clean := path.Clean("/" + strings.TrimLeft(strings.TrimSpace(value), "/"))
 	root := path.Clean("/" + strings.TrimLeft(s.applicationRoot, "/"))
