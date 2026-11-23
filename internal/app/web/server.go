@@ -374,7 +374,7 @@ func (s *Server) validateCloudPath(value string) error {
 	return nil
 }
 func validateFileName(name string) error {
-	if strings.TrimSpace(name)=="" || name=="." || name==".." || strings.ContainsAny(name,"/\\") { return errors.New("file name must be a single non-empty path component") }
+	if strings.TrimSpace(name)=="" || name=="." || name==".." || strings.ContainsAny(name,"/\\\x00\r\n") { return errors.New("file name must be a single non-empty path component") }
 	return nil
 }
 func parsePage(value string) int { n,err:=strconv.Atoi(value); if err!=nil || n<1 { return 1 }; return n }
