@@ -8,6 +8,9 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - Default storage mode: Hybrid (streaming + mirroring + selective offline access).
 - Synchronization: two-way.
 - Upload encryption: ask the user for each upload.
+- Encryption unlock model: one application-level vault password unlocks all encrypted files for the current app session. Users are not prompted separately for every encrypted picture/file after the vault is unlocked.
+- On app close/exit, clear unlocked key material from memory. On next launch, require the vault password again. Provide a manual "Lock now" action and configurable idle auto-lock.
+- Each encrypted file uses its own random data-encryption key; the application vault key wraps those keys. This preserves per-file cryptographic isolation while allowing one unlock per session.
 - Encryption algorithm requested: XChaCha20-Poly1305, performed client-side.
 - Development priority: all requested platforms, delivered in phases.
 - Windows file opening: smart automatic mode (stream where possible, fetch on demand, cache intelligently, fully download when required).
@@ -72,6 +75,11 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - Accessibility, keyboard navigation, drag/drop, sortable columns, context menus and high-DPI/responsive layouts.
 
 ## Security
+- One application-level vault password unlocks encrypted-file access once per app session. Opening another encrypted file during that session does not ask again.
+- Show a closed-lock indicator for encrypted files while the vault is locked and an open-lock indicator while the vault is unlocked for the current session. Indicators must be backed by authenticated encryption metadata; never label an ordinary file as encrypted.
+- Provide a global "Lock now" action, idle auto-lock setting and visible vault state in the app header/profile menu.
+- On app exit, shutdown or explicit lock, clear decrypted key material from memory and close decrypted preview/cache handles where practical. The next app launch requires the vault password again.
+- Password hints are optional and must never contain the password or secrets.
 - Ask before each upload whether to encrypt.
 - Encrypted content must be encrypted before leaving the device and decrypted locally for supported previews/streaming. A single vault password unlocks per-file wrapped keys for the current application session.
 - XChaCha20-Poly1305 is the requested AEAD. Key derivation, key backup/recovery, nonce layout, authenticated metadata, encrypted cache, and multi-device key sharing must be designed and reviewed before enabling production encryption.
