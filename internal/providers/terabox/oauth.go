@@ -200,8 +200,8 @@ func (c *OAuthClient) TokenInformation(ctx context.Context, accessToken string) 
 	if err := c.do(req, &env); err != nil {
 		return TokenInfo{}, err
 	}
-	if env.Data.APIDomain == "" {
-		return TokenInfo{}, errors.New("TeraBox token information omitted API domain")
+	if strings.TrimSpace(env.Data.APIDomain) == "" || strings.TrimSpace(env.Data.UploadDomain) == "" {
+		return TokenInfo{}, errors.New("TeraBox token information omitted API or upload domain")
 	}
 	return env.Data, nil
 }

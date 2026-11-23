@@ -87,3 +87,16 @@ func TestOAuthDoesNotFollowCredentialBearingRedirects(t *testing.T) {
 		t.Fatalf("credentials were forwarded through redirect; target requests = %d", got)
 	}
 }
+
+
+func TestTokenInfoRejectsMissingUploadDomain(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+		fmt.Fprint(w,`{"errno":0,"data":{"api_domain":"api.terabox.com","user_id":42}}`)
+	}))
+	defer server.Close()
+	client,err := NewOAuthClient(OAuthConfig{ClientID:"id",ClientSecret:"secret",PrivateSecret:"private",BaseURL:server.URL})
+	if err != nil { t.Fatal(err) }
+	if _,err := client.TokenInformation(context.Background(),"access"); err == nil {
+		t.Fatal("expected token information without upload domain to be rejected")
+	}
+}
