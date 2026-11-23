@@ -12,6 +12,14 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - Development priority: all requested platforms, delivered in phases.
 - Windows file opening: smart automatic mode (stream where possible, fetch on demand, cache intelligently, fully download when required).
 
+## Account profile and application settings
+- A profile menu in the top-right corner of the desktop application.
+- Profile summary, connected TeraBox account, account switching, sign-out and access to settings.
+- General preferences: theme, automatic folder refresh, automatic release checks and diagnostics.
+- Security settings: per-file encryption, password changes, password hints, recovery-key management and encrypted-file recovery.
+- Application update checker: query the official TBox Drive GitHub releases endpoint, show the latest release and open its release notes/download page. Silent background installation must not occur without explicit user consent.
+- Automatic folder refresh should be configurable and avoid overlapping requests or disrupting active transfers.
+
 ## Desktop experience
 - Windows 10/11, macOS Intel/Apple Silicon, and Linux.
 - A Windows WinFsp-backed virtual-drive prototype is implemented: it lists remote content, hydrates whole files into a local cache on open, and uploads edits on flush/close. It is not yet byte-range streaming or a full offline-sync engine.
