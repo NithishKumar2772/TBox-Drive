@@ -2,6 +2,8 @@ package sqlite
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -29,6 +31,42 @@ func Open(path string)(*Store,error){
 	if err:=s.Migrate(context.Background());err!=nil{db.Close();return nil,err};return s,nil
 }
 func(s *Store)Close()error{return s.db.Close()}
+
+ // AcquireCredentialLock coordinates credential refresh and disconnect across
+ // desktop and web processes that share this SQLite database. Expired leases
+ // are reclaimed automatically after a process crash.
+func (s *Store) AcquireCredentialLock(ctx context.Context, key string, lease time.Duration) (func() error, error) {
+	key = strings.TrimSpace(key)
+	if key == "" { return nil, errors.New("credential lock key is required") }
+	if lease <= 0 { lease = 5 * time.Minute }
+	var ownerBytes [16]byte
+	if _, err := rand.Read(ownerBytes[:]); err != nil { return nil, fmt.Errorf("create credential lock owner: %w", err) }
+	owner := hex.EncodeToString(ownerBytes[:])
+	for {
+		now := time.Now().UTC()
+		result, err := s.db.ExecContext(ctx, `INSERT INTO credential_locks(lock_key,owner,expires_at_ns) VALUES(?,?,?)
+			ON CONFLICT(lock_key) DO UPDATE SET owner=excluded.owner,expires_at_ns=excluded.expires_at_ns
+			WHERE credential_locks.expires_at_ns <= ?`, key, owner, now.Add(lease).UnixNano(), now.UnixNano())
+		if err != nil { return nil, fmt.Errorf("acquire credential lock: %w", err) }
+		affected, err := result.RowsAffected()
+		if err != nil { return nil, fmt.Errorf("check credential lock: %w", err) }
+		if affected == 1 {
+			return func() error {
+				_, err := s.db.ExecContext(context.Background(), `DELETE FROM credential_locks WHERE lock_key=? AND owner=?`, key, owner)
+				if err != nil { return fmt.Errorf("release credential lock: %w", err) }
+				return nil
+			}, nil
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() { <-timer.C }
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 func(s *Store)Migrate(ctx context.Context)error{
 	const schema=`CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,provider_id TEXT NOT NULL,display_name TEXT NOT NULL DEFAULT '',credential_ref TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
@@ -36,7 +74,7 @@ CREATE TABLE IF NOT EXISTS transfers(id TEXT PRIMARY KEY,provider_id TEXT NOT NU
 CREATE INDEX IF NOT EXISTS idx_transfers_status_updated ON transfers(status,updated_at);
 CREATE TABLE IF NOT EXISTS transfer_parts(transfer_id TEXT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,part_index INTEGER NOT NULL CHECK(part_index>=0),byte_offset INTEGER NOT NULL CHECK(byte_offset>=0),byte_size INTEGER NOT NULL CHECK(byte_size>=0),checksum TEXT NOT NULL DEFAULT '',remote_part_id TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(transfer_id,part_index));
 CREATE TABLE IF NOT EXISTS provider_sessions(transfer_id TEXT PRIMARY KEY REFERENCES transfers(id) ON DELETE CASCADE,session_ref TEXT NOT NULL,expires_at TEXT,updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS transfer_events(id INTEGER PRIMARY KEY AUTOINCREMENT,transfer_id TEXT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,event_type TEXT NOT NULL,created_at TEXT NOT NULL);`
+CREATE TABLE IF NOT EXISTS transfer_events(id INTEGER PRIMARY KEY AUTOINCREMENT,transfer_id TEXT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,event_type TEXT NOT NULL,created_at TEXT NOT NULL);\nCREATE TABLE IF NOT EXISTS credential_locks(lock_key TEXT PRIMARY KEY,owner TEXT NOT NULL,expires_at_ns INTEGER NOT NULL);`
 	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return err};defer tx.Rollback()
 	if _,err:=tx.ExecContext(ctx,schema);err!=nil{return fmt.Errorf("apply SQLite schema: %w",err)}
 	if _,err:=tx.ExecContext(ctx,"INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,?)",time.Now().UTC().Format(time.RFC3339Nano));err!=nil{return err}
