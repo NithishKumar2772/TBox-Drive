@@ -148,7 +148,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	var accountID, parentPath, name string
 	var temp *os.File
 	var fileSize int64
-	defer func(){ if temp != nil { _ = os.Remove(temp.Name()) } }()
+	defer func(){ if temp != nil { _ = temp.Close(); _ = os.Remove(temp.Name()) } }()
 	for {
 		part, nextErr := reader.NextPart()
 		if errors.Is(nextErr, io.EOF) { break }
