@@ -41,6 +41,8 @@ func TestLoopbackStatusIsAvailable(t *testing.T){
 	server.Handler().ServeHTTP(response,req)
 	if response.Code!=http.StatusOK{t.Fatalf("status = %d, body=%s",response.Code,response.Body.String())}
 	if response.Header().Get("X-Content-Type-Options")!="nosniff"{t.Fatal("security headers were not applied")}
+	if response.Header().Get("Content-Security-Policy")==""{t.Fatal("content security policy was not applied")}
+	if response.Header().Get("Cache-Control")!="no-store"{t.Fatal("API response should not be cached")}
 }
 
 func TestRejectsNonLoopbackHost(t *testing.T){
