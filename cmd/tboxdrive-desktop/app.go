@@ -54,6 +54,7 @@ func(d *DesktopApp)ListFiles(accountID,parentPath,pageToken string)(FilePage,err
 func parsePage(token string)int{if token==""{return 1};var n int;if _,err:=fmt.Sscanf(token,"%d",&n);err!=nil||n<1{return 1};return n}
 func(d *DesktopApp)GetStorageQuota(accountID string)(terabox.Quota,error){if err:=d.requireService();err!=nil{return terabox.Quota{},err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return terabox.Quota{},err};return api.StorageQuota(d.ctx)}
 func(d *DesktopApp)SelectUploadFile()(string,error){return runtime.OpenFileDialog(d.ctx,runtime.OpenDialogOptions{Title:"Select a file to upload"})}
+func(d *DesktopApp)SelectUploadFiles()([]string,error){return runtime.OpenMultipleFilesDialog(d.ctx,runtime.OpenDialogOptions{Title:"Select files to upload"})}
 func(d *DesktopApp)UploadFile(accountID,localPath,parentPath,name,taskID string)(provider.UploadResult,error){
 	if err:=d.requireService();err!=nil{return provider.UploadResult{},err};if localPath==""{return provider.UploadResult{},errors.New("select a local file first")}
 	if name==""{name=path.Base(localPath)};if name=="."||name=="/"||name==".."||strings.ContainsAny(name,"/\\"){return provider.UploadResult{},errors.New("file name must not contain path separators")}
