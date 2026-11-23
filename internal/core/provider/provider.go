@@ -16,7 +16,7 @@ type File struct {
 	ETag string
 }
 
-type UploadRequest struct { LocalPath, ParentID, Name string; Size int64 }
+type UploadRequest struct { LocalPath, ParentID, Name string; Size int64; TaskID string }
 type UploadResult struct {
 	File File
 	TaskID string
