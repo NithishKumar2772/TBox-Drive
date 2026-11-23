@@ -170,15 +170,69 @@ func(d *DesktopApp)CancelTransfer(taskID string)error{
 func(d *DesktopApp)RenameFile(accountID,remotePath,newName string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.Rename(d.ctx,remotePath,newName)}
 func(d *DesktopApp)DeleteFile(accountID,remotePath string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.DeletePath(d.ctx,remotePath)}
 func(d *DesktopApp)MoveFile(accountID,remotePath,destinationDir,newName string)error{if err:=d.requireService();err!=nil{return err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return err};return api.Move(d.ctx,remotePath,destinationDir,newName)}
-func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string)(string,error){
-	if err:=d.requireService();err!=nil{return "",err};api,err:=d.service.NewAPIClient(d.ctx,accountID);if err!=nil{return "",err}
-	destination,err:=runtime.SaveFileDialog(d.ctx,runtime.SaveDialogOptions{Title:"Save downloaded file",DefaultFilename:fileName});if err!=nil{return "",err};if destination==""{return "",nil}
-	body,err:=api.Download(d.ctx,fileID);if err!=nil{return "",err};defer body.Close()
+func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string,size int64,taskID string)(saved string,retErr error){
+	if err:=d.requireService();err!=nil{return "",err}
+	if size<0{return "",errors.New("download size cannot be negative")}
+	destination,err:=runtime.SaveFileDialog(d.ctx,runtime.SaveDialogOptions{Title:"Save downloaded file",DefaultFilename:fileName})
+	if err!=nil{return "",err}
+	if destination==""{return "",nil}
+	if taskID==""{var id [16]byte;if _,err:=rand.Read(id[:]);err!=nil{return "",err};taskID="tbox-"+hex.EncodeToString(id[:])}
+	transferCtx,cancel:=context.WithCancel(d.ctx)
+	d.transferMu.Lock()
+	if d.transferCancels==nil{d.transferCancels=make(map[string]context.CancelFunc)}
+	if _,exists:=d.transferCancels[taskID];exists{
+		d.transferMu.Unlock();cancel()
+		return "",errors.New("transfer ID is already active")
+	}
+	d.transferCancels[taskID]=cancel
+	d.transferMu.Unlock()
+	var transferred int64
+	defer func(){
+		cancel()
+		d.transferMu.Lock();delete(d.transferCancels,taskID);d.transferMu.Unlock()
+		status:=transfer.StatusFailed;message:="download failed"
+		if retErr==nil{status=transfer.StatusCompleted;transferred=size;message=""}else if errors.Is(retErr,context.Canceled){status=transfer.StatusCanceled;message="download canceled"}
+		if d.store!=nil{_ = d.store.UpdateProgress(context.Background(),taskID,transferred,status,message)}
+	}()
+	task:=transfer.Task{ID:taskID,ProviderID:"terabox",Direction:"download",Source:fileID,Destination:destination,Size:size,Status:transfer.StatusQueued}
+	if err:=d.store.CreateTransfer(transferCtx,task);err!=nil{return "",fmt.Errorf("create download transfer record: %w",err)}
+	if err:=d.store.UpdateProgress(transferCtx,taskID,0,transfer.StatusRunning,"");err!=nil{return "",fmt.Errorf("start download transfer record: %w",err)}
+	api,err:=d.service.NewAPIClient(transferCtx,accountID);if err!=nil{return "",err}
+	body,err:=api.Download(transferCtx,fileID);if err!=nil{return "",err};defer body.Close()
 	temp,err:=os.CreateTemp(filepath.Dir(destination),".tbox-download-*");if err!=nil{return "",err}
-	tempName:=temp.Name();committed:=false;defer func(){_ = temp.Close();if !committed{_ = os.Remove(tempName)}}()
-	if _,err:=io.Copy(temp,body);err!=nil{return "",fmt.Errorf("download file: %w",err)}
-	if err:=temp.Sync();err!=nil{return "",err};if err:=temp.Close();err!=nil{return "",err}
-	if err:=os.Rename(tempName,destination);err!=nil{return "",err};committed=true;return destination,nil
+	tempName:=temp.Name();committed:=false
+	defer func(){_ = temp.Close();if !committed{_ = os.Remove(tempName)}}()
+	writer:=&downloadProgressWriter{writer:temp,total:size,onProgress:func(done,total int64){
+		transferred=done
+		_ = d.store.UpdateProgress(context.Background(),taskID,done,transfer.StatusRunning,"")
+		runtime.EventsEmit(d.ctx,"transfer-progress",map[string]any{"transferId":taskID,"transferred":done,"total":total})
+	}}
+	written,err:=io.Copy(writer,body)
+	if err!=nil{return "",fmt.Errorf("download file: %w",err)}
+	if size>0&&written!=size{return "",fmt.Errorf("download size mismatch: expected %d bytes, received %d",size,written)}
+	if err:=temp.Sync();err!=nil{return "",err}
+	if err:=temp.Close();err!=nil{return "",err}
+	if err:=os.Rename(tempName,destination);err!=nil{return "",err}
+	committed=true
+	return destination,nil
+}
+
+type downloadProgressWriter struct{
+	writer io.Writer
+	total int64
+	transferred int64
+	lastReported int64
+	lastReport time.Time
+	onProgress func(int64,int64)
+}
+func(w *downloadProgressWriter)Write(p []byte)(int,error){
+	n,err:=w.writer.Write(p)
+	w.transferred+=int64(n)
+	if n>0&&w.onProgress!=nil&&(w.transferred-w.lastReported>=1<<20||time.Since(w.lastReport)>=200*time.Millisecond||err!=nil){
+		w.lastReported=w.transferred;w.lastReport=time.Now()
+		w.onProgress(w.transferred,w.total)
+	}
+	return n,err
 }
 
 func(d *DesktopApp)CheckForUpdates()(UpdateInfo,error){
