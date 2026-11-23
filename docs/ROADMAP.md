@@ -6,36 +6,39 @@
 - [x] Chunk planner and tests
 - [x] CI for Go and frontend
 - [x] Retry policy and unit tests
+- [x] SQLite account/transfer/part/session repository
 
-## M1 TeraBox authentication and account
-- [x] Official OAuth device QR request
-- [x] Authorization-code/device-code exchange
-- [x] Device-code polling and refresh
+## M1 TeraBox account and authentication
+- [x] Official OAuth device QR request and polling
+- [x] Authorization-code/device-code exchange and refresh
 - [x] Token info and account-specific API domains
-- [ ] TeraBox app credentials approval and real account verification
-- [ ] OS credential vault integration
+- [x] Account connection service
+- [x] OS credential vault adapter (Windows/macOS/Linux)
+- [ ] TeraBox application approval and real account verification
+- [ ] Wails UI connection flow
 
 ## M2 TeraBox file operations
 - [x] Paginated file listing
 - [x] Storage quota lookup
 - [x] Streaming download
-- [x] Multipart upload and server-side resume discovery
+- [x] Multipart upload and MD5 part verification
+- [x] Resume discovery and retry after ambiguous part responses
+- [x] Persist transfer task, session and completed part state
 - [ ] Empty-file upload
 - [ ] Folder create/rename/delete and file delete
 - [ ] Real account integration tests
 
-## M3 Transfer engine and persistence
-- [x] Chunk planning and provider-aware minimum part size
-- [x] MD5 part verification and finalization
+## M3 Transfer engine
+- [x] Provider-aware shard planner
 - [x] Exponential retry policy
-- [x] SQLite task/part/session schema and repository
-- [ ] Wire durable repository into transfer orchestration
+- [x] SQLite transfer repository wired into TeraBox adapter
+- [x] Resume by transfer ID
 - [ ] Bounded parallel part upload
-- [ ] Pause/resume and crash recovery end-to-end
+- [ ] Pause/resume UI and crash recovery experience
 
 ## M4 Desktop
 - [ ] Wails integration
-- [ ] React explorer connected to backend
+- [ ] React explorer connected to backend services
 - [ ] Transfer dashboard and account settings
 
 ## M5 Multi-cloud
