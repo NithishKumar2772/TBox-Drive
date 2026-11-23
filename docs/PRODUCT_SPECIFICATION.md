@@ -12,7 +12,9 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - On app close/exit, clear unlocked key material from memory. On next launch, require the vault password again. Provide a manual "Lock now" action and configurable idle auto-lock.
 - Each encrypted file uses its own random data-encryption key; the application vault key wraps those keys. This preserves per-file cryptographic isolation while allowing one unlock per session.
 - Encryption algorithm requested: XChaCha20-Poly1305, performed client-side.
-- Development priority: all requested platforms, delivered in phases.
+- Development priority: Windows desktop + self-hosted Web first; macOS next; then TV clients; then Android and iOS mobile clients.
+- Web deployment: self-hosted first, running on the user's own computer and using the shared Go application services.
+- Initial Web network boundary: loopback-only listener; LAN/public access disabled by default. Remote device access requires a separately reviewed authentication, TLS, session revocation and threat model.
 - Windows file opening: smart automatic mode (stream where possible, fetch on demand, cache intelligently, fully download when required).
 
 ## Account profile and application settings
