@@ -88,6 +88,7 @@ type cloudFileSystem struct {
 	api APIClientFactory
 	root string
 	cacheDir string
+	cacheLocks sync.Map
 }
 
 func (fs *cloudFileSystem) apiClient() (*terabox.APIClient, error) {
@@ -212,7 +213,18 @@ func (fs *cloudFileSystem) ensureCached(item provider.File) (string, error) {
 	key := fmt.Sprintf("%s:%d:%d", item.ID, item.Size, item.ModifiedAt.Unix())
 	sum := sha256.Sum256([]byte(key))
 	local := filepath.Join(fs.cacheDir, hex.EncodeToString(sum[:]))
-	if stat, err := os.Stat(local); err == nil && stat.Size() == item.Size { return local, nil }
+	lockValue, _ := fs.cacheLocks.LoadOrStore(local, &sync.Mutex{})
+	cacheLock := lockValue.(*sync.Mutex)
+	cacheLock.Lock()
+	defer cacheLock.Unlock()
+	if stat, err := os.Stat(local); err == nil {
+		if stat.Size() == item.Size { return local, nil }
+		// A size mismatch can indicate a locally edited file whose previous
+		// upload failed. Never delete that only remaining copy automatically.
+		return "", fmt.Errorf("local cache for %q differs from cloud size; preserving it instead of overwriting possible unsynced changes", item.Name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect virtual-drive cache: %w", err)
+	}
 	api, err := fs.apiClient()
 	if err != nil { return "", err }
 	body, err := api.Download(fs.ctx, item.ID)
@@ -228,7 +240,6 @@ func (fs *cloudFileSystem) ensureCached(item provider.File) (string, error) {
 	if item.Size > 0 && written != item.Size { return "", fmt.Errorf("download size mismatch: expected %d bytes, received %d", item.Size, written) }
 	if err := tmp.Sync(); err != nil { return "", err }
 	if err := tmp.Close(); err != nil { return "", err }
-	if err := os.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) { return "", err }
 	if err := os.Rename(tmpName, local); err != nil { return "", err }
 	ok = true
 	return local, nil
