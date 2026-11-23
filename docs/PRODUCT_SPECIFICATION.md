@@ -25,6 +25,15 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 - A Windows WinFsp-backed virtual-drive prototype is implemented: it lists remote content, hydrates whole files into a local cache on open, and uploads edits on flush/close. It is not yet byte-range streaming or a full offline-sync engine.
 - macOS Finder/File Provider and Linux file-manager integrations remain target capabilities, not yet implemented.
 - Windows target: File Explorer integration, online-only files, on-demand hydration, offline pinning, cache management, status icons, context actions, drag/drop, search, sort, properties and reconnect.
+- Windows Explorer experience target:
+  - Shell status overlays for cloud-only, downloading, synced, offline-pinned, encrypted/locked, encrypted/unlocked, conflict and error states.
+  - Right-click actions: Open in TBox Drive, download now, make available offline, free up local space, upload/sync now, view transfer status, copy cloud path/link where supported, and lock/unlock the TBox encryption vault.
+  - Drag files/folders into the T: drive to upload; drag/copy from the drive to local storage to download. Confirm overwrite and conflict cases.
+  - File/folder properties page with remote size, cloud path, account, sync state, cache size, last sync and encryption state.
+  - Explorer preview/thumbnail integration for supported media and documents, with local decryption only after vault unlock.
+  - Windows notifications for upload/download completion, errors, authentication expiry and conflicts.
+  - Offline pinning and "Free up space" actions must preserve the remote original and never remove a pinned local copy.
+  - Context menu, shell extension and icon-overlay registration must be signed, versioned and uninstall cleanly. Prefer modern Windows Cloud Files API placeholders where practical; keep WinFsp fallback compatibility.
 - macOS target: Finder/File Provider integration.
 - Linux target: file-manager integration through an appropriate mount provider such as FUSE.
 - Light, dark and system themes.
@@ -64,7 +73,7 @@ TBox Drive is a TeraBox-only cloud file manager with a Google Drive for Desktop-
 
 ## Security
 - Ask before each upload whether to encrypt.
-- Encrypted content must be encrypted before leaving the device and decrypted locally for supported previews/streaming.
+- Encrypted content must be encrypted before leaving the device and decrypted locally for supported previews/streaming. A single vault password unlocks per-file wrapped keys for the current application session.
 - XChaCha20-Poly1305 is the requested AEAD. Key derivation, key backup/recovery, nonce layout, authenticated metadata, encrypted cache, and multi-device key sharing must be designed and reviewed before enabling production encryption.
 - Never store plaintext keys or provider tokens in SQLite or logs. Use OS credential/key storage where available.
 - Use official TeraBox OAuth; never collect TeraBox/Google passwords in a cloned login form.
