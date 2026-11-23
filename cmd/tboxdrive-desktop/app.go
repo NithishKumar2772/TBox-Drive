@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
@@ -26,6 +28,17 @@ import (
 
 type AppStatus struct { Ready bool `json:"ready"`; Message string `json:"message"`; ApplicationRoot string `json:"applicationRoot,omitempty"` }
 type FilePage struct { Files []provider.File `json:"files"`; NextPageToken string `json:"nextPageToken,omitempty"` }
+type UpdateInfo struct {
+	LatestVersion string `json:"latestVersion"`
+	ReleaseURL string `json:"releaseURL"`
+	PublishedAt string `json:"publishedAt,omitempty"`
+	CheckedAt time.Time `json:"checkedAt"`
+}
+type githubRelease struct {
+	TagName string `json:"tag_name"`
+	HTMLURL string `json:"html_url"`
+	PublishedAt string `json:"published_at"`
+}
 type DesktopApp struct { ctx context.Context; store *sqlite.Store; service *app.TeraBoxService; drive *virtualdrive.Manager; applicationRoot string; message string }
 func NewDesktopApp()*DesktopApp{return &DesktopApp{drive:virtualdrive.NewManager(),message:"Starting TBox Drive…"}}
 func(d *DesktopApp)startup(ctx context.Context){
@@ -94,4 +107,23 @@ func(d *DesktopApp)DownloadFile(accountID,fileID,fileName string)(string,error){
 	if err:=temp.Sync();err!=nil{return "",err};if err:=temp.Close();err!=nil{return "",err}
 	if err:=os.Rename(tempName,destination);err!=nil{return "",err};committed=true;return destination,nil
 }
+
+func(d *DesktopApp)CheckForUpdates()(UpdateInfo,error){
+	ctx:=d.ctx
+	if ctx==nil{ctx=context.Background()}
+	req,err:=http.NewRequestWithContext(ctx,http.MethodGet,"https://api.github.com/repos/NithishKumar2772/TBox-Drive/releases/latest",nil)
+	if err!=nil{return UpdateInfo{},err}
+	req.Header.Set("Accept","application/vnd.github+json")
+	req.Header.Set("User-Agent","TBox-Drive-Update-Checker")
+	client:=&http.Client{Timeout:8*time.Second}
+	response,err:=client.Do(req)
+	if err!=nil{return UpdateInfo{},fmt.Errorf("check GitHub releases: %w",err)}
+	defer response.Body.Close()
+	if response.StatusCode!=http.StatusOK{return UpdateInfo{},fmt.Errorf("GitHub release check returned HTTP %d",response.StatusCode)}
+	var release githubRelease
+	if err:=json.NewDecoder(io.LimitReader(response.Body,1<<20)).Decode(&release);err!=nil{return UpdateInfo{},fmt.Errorf("decode GitHub release information: %w",err)}
+	if strings.TrimSpace(release.TagName)==""||strings.TrimSpace(release.HTMLURL)==""{return UpdateInfo{},errors.New("latest GitHub release is missing its tag or URL")}
+	return UpdateInfo{LatestVersion:release.TagName,ReleaseURL:release.HTMLURL,PublishedAt:release.PublishedAt,CheckedAt:time.Now().UTC()},nil
+}
+
 func(d *DesktopApp)ListTransfers(limit int)([]transfer.Task,error){if d.store==nil{return nil,errors.New("local database is not available")};if limit<1{limit=50};return d.store.ListTransfers(d.ctx,limit)}
