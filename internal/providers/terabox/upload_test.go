@@ -22,7 +22,9 @@ import (
 )
 
 func TestUploadFileRejectsUnsafeParallelPartCount(t *testing.T) {
-	api, err := newTestAPI(httptest.NewServer(http.NotFoundHandler()))
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	api, err := newTestAPI(server)
 	if err != nil {
 		t.Fatal(err)
 	}
