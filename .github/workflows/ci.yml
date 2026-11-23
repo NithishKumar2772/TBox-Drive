@@ -18,8 +18,8 @@ jobs:
         run: find ./cmd ./internal -name '*.go' -print0 | xargs -0 gofmt -w
       - name: Resolve and lock Go dependencies
         run: go mod tidy
-      - name: Print generated module checksums
-        run: cat go.sum
+      - name: Print resolved module files
+        run: cat go.mod && cat go.sum
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./...
