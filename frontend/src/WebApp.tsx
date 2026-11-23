@@ -51,8 +51,8 @@ export default function WebApp() {
     setAccountID(current => current && result.some(item => item.id === current) ? current : result[0]?.id ?? "");
   }, []);
   const refreshFiles = useCallback(async (id = accountID, folder = currentPath) => {
-    if (!id) { setFiles([]); setQuota(null); return; }
     const generation = ++fileRequestGeneration.current;
+    if (!id) { setFiles([]); setNextPageToken(""); setQuota(null); return; }
     const query = new URLSearchParams({ account_id: id, path: folder || root, page: "1" });
     const [page, storage] = await Promise.all([api<FilePage>(`/api/files?${query}`), api<Quota>(`/api/quota?account_id=${encodeURIComponent(id)}`)]);
     if (generation !== fileRequestGeneration.current) return;
@@ -105,6 +105,12 @@ export default function WebApp() {
   }, [refreshAccounts, refreshTransfers]);
   useEffect(() => { if (accountID) void refreshFiles(accountID, currentPath).catch(error => setMessage(String(error))); }, [accountID, currentPath, refreshFiles]);
   useEffect(() => { const timer = window.setInterval(() => { void refreshTransfers().catch(() => undefined); }, 5000); return () => window.clearInterval(timer); }, [refreshTransfers]);
+  const uploadActive = uploadProgress !== null;
+  useEffect(() => {
+    if (!uploadActive) return;
+    const timer = window.setInterval(() => { void refreshTransfers().catch(() => undefined); }, 1000);
+    return () => window.clearInterval(timer);
+  }, [uploadActive, refreshTransfers]);
   useEffect(() => () => {
     connectAbort.current?.abort();
     uploadRequest.current?.abort();
@@ -213,10 +219,15 @@ export default function WebApp() {
     finally { setBusy(false); }
   };
   const move = async (file: CloudFile) => {
-    const destination = window.prompt("Move to folder path (inside your TBox Drive application folder)", currentPath || root);
+    const destination = window.prompt("Move to folder path (inside your TBox Drive application folder)", root);
     if (!destination?.trim()) return;
     const normalized = destination.trim().replace(/\\/g, "/").replace(/\/$/, "");
     const source = file.path.replace(/\/$/, "");
+    const sourceParent = source.slice(0, source.lastIndexOf("/")) || root;
+    if (normalized === sourceParent) {
+      setMessage("This item is already in that folder.");
+      return;
+    }
     if (normalized === source || normalized.startsWith(source + "/")) {
       setMessage("A folder cannot be moved into itself or one of its descendants.");
       return;
