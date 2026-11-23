@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -55,4 +57,46 @@ func TestTokenInfo(t *testing.T) {
 func TestOAuthRejectsInsecureRemoteBaseURL(t *testing.T) {
 	_,err:=NewOAuthClient(OAuthConfig{ClientID:"id",ClientSecret:"secret",PrivateSecret:"private",BaseURL:"http://example.com"})
 	if err==nil{t.Fatal("expected insecure URL rejection")}
+}
+
+
+func TestOAuthDoesNotFollowCredentialBearingRedirects(t *testing.T) {
+	var redirectedRequests atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirectedRequests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+
+	client, err := NewOAuthClient(OAuthConfig{
+		ClientID: "id", ClientSecret: "secret", PrivateSecret: "private", BaseURL: origin.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.BeginDeviceAuthorization(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "HTTP 307") {
+		t.Fatalf("expected redirect response to be rejected, got %v", err)
+	}
+	if got := redirectedRequests.Load(); got != 0 {
+		t.Fatalf("credentials were forwarded through redirect; target requests = %d", got)
+	}
+}
+
+
+func TestTokenInfoRejectsMissingUploadDomain(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
+		fmt.Fprint(w,`{"errno":0,"data":{"api_domain":"api.terabox.com","user_id":42}}`)
+	}))
+	defer server.Close()
+	client,err := NewOAuthClient(OAuthConfig{ClientID:"id",ClientSecret:"secret",PrivateSecret:"private",BaseURL:server.URL})
+	if err != nil { t.Fatal(err) }
+	if _,err := client.TokenInformation(context.Background(),"access"); err == nil {
+		t.Fatal("expected token information without upload domain to be rejected")
+	}
 }
