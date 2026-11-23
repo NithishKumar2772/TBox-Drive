@@ -28,6 +28,7 @@ declare global {
       SelectUploadFile: () => Promise<string>;
       SelectUploadFiles: () => Promise<string[]>;
       UploadFile: (accountID: string, localPath: string, parentPath: string, name: string, taskID: string) => Promise<UploadResult>;
+      CancelTransfer: (taskID: string) => Promise<void>;
       DownloadFile: (accountID: string, fileID: string, fileName: string) => Promise<string>;
       ListTransfers: (limit: number) => Promise<Transfer[]>;
       GetVirtualDriveStatus: () => Promise<DriveStatus>;
@@ -67,6 +68,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<TransferProgress | null>(null);
+  const [activeTransferId, setActiveTransferId] = useState("");
   const lastProgress = useRef<{ id: string; transferred: number; at: number } | null>(null);
   const autoRefreshInFlight = useRef(false);
   const fileRequestGeneration = useRef(0);
@@ -246,18 +248,32 @@ export default function App() {
       for (const localPath of localPaths) {
         const name = localPath.split(/[\\\\/]/).pop() ?? "upload";
         setMessage(`Uploading ${completed + 1} of ${localPaths.length}: ${name}`);
+        const taskID = `tbox-${crypto.randomUUID()}`;
+        setActiveTransferId(taskID);
         try {
-          const result = await api.UploadFile(accountID, localPath, currentPath, name, "");
+          const result = await api.UploadFile(accountID, localPath, currentPath, name, taskID);
           completed += 1;
           setMessage(`Uploaded ${completed} of ${localPaths.length}: ${result.file.name}`);
         } catch (error) {
           failed.push(`${name}: ${String(error)}`);
+          if (/context canceled|cancelled|canceled/i.test(String(error))) break;
+        } finally {
+          setActiveTransferId("");
         }
       }
       setMessage(failed.length ? `Uploaded ${completed} of ${localPaths.length}. Failed: ${failed.join("; ")}` : `Successfully uploaded ${completed} file(s).`);
       await refreshFiles(); await refreshTransfers();
     } catch (e) { setMessage(String(e)); await refreshTransfers(); }
     finally { setBusy(false); }
+  };
+
+  const cancelActiveTransfer = async () => {
+    const api = desktop();
+    if (!api || !activeTransferId) return;
+    try {
+      await api.CancelTransfer(activeTransferId);
+      setMessage("Transfer cancellation requested. The current upload will stop safely.");
+    } catch (error) { setMessage(String(error)); }
   };
 
   const rename = async (file: CloudFile) => {
@@ -504,7 +520,7 @@ export default function App() {
               <span>{t.direction}</span>
             </div>)}
           </div> : <div className="empty"><div className="empty-icon">⇅</div><h3>No transfers yet</h3><p>Uploads and downloads will appear here.</p></div>}
-          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? formatDuration(progress.etaSeconds) : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div></div>}
+          {progress && <div className="progress-wrap"><div className="progress-label"><span>Current transfer</span><span>{formatBytes(progress.transferred)} / {formatBytes(progress.total)}</span></div><div className="transfer-metrics"><span>Speed: <strong>{progress.speedBps > 0 ? `${formatBytes(progress.speedBps)}/s` : "Calculating…"}</strong></span><span>Estimated time: <strong>{progress.etaSeconds !== null ? formatDuration(progress.etaSeconds) : "Calculating…"}</strong></span></div><div className="progress"><span style={{ width: `${progress.total ? Math.min(100, progress.transferred / progress.total * 100) : 0}%` }} /></div>{activeTransferId && <button className="secondary danger" onClick={() => void cancelActiveTransfer()}>Cancel current upload</button>}</div>}
         </article>}
       </section>
     </main>
