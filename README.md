@@ -181,7 +181,7 @@ $env:TBOX_TERABOX_APP_FOLDER = "/From: Other Applications/TBox-Drive"
 go run ./cmd/tboxdrive
 ```
 
-Open http://127.0.0.1:8765. The server refuses non-loopback bind addresses. Use Ctrl+C to stop it. The same environment variables are used by the desktop app.
+Open the private launch URL printed in the console. It contains a random startup token; do not share it. The server refuses non-loopback bind addresses. Use Ctrl+C to stop it. The same environment variables are used by the desktop app.
 
 See [docs/WEB.md](docs/WEB.md) for the browser API, security boundary and troubleshooting.
 
