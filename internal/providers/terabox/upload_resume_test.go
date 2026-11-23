@@ -61,7 +61,7 @@ func TestUploadFileResumesAfterInterruptedPart(t *testing.T) {
 
 	local := filepath.Join(t.TempDir(), "resume.bin")
 	if err := os.WriteFile(local, make([]byte, 10<<20), 0600); err != nil { t.Fatal(err) }
-	api, err := NewAPIClient(APIConfig{AccessToken:"test", TokenInfo:TokenInfo{APIDomain:server.URL, UploadDomain:server.URL}, ApplicationRoot:"/From: Other Applications/TBox-Drive-123"})
+	api, err := newTestAPI(&httptest.Server{URL: server.URL, Client: server.Client()})
 	if err != nil { t.Fatal(err) }
 	store, err := sqlite.Open(":memory:")
 	if err != nil { t.Fatal(err) }
