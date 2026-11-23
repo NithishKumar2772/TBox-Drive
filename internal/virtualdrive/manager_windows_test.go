@@ -22,7 +22,7 @@ func cachePathForTest(dir string, item provider.File) string {
 
 func TestEnsureCachedPreservesPossibleUnsyncedEdits(t *testing.T) {
 	cacheDir := t.TempDir()
-	item := provider.File{ID: "123", Name: "edited.txt", Size: 10, ModifiedAt: time.Unix(100, 0)}
+	item := provider.File{ID: "123", Name: "edited.txt", Size: 11, ModifiedAt: time.Unix(100, 0)}
 	local := cachePathForTest(cacheDir, item)
 	original := []byte("local edit")
 	if err := os.WriteFile(local, original, 0600); err != nil {
