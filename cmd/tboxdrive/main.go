@@ -61,7 +61,7 @@ func run() error {
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() { return fmt.Errorf("TBOX_WEB_ADDR must use a loopback IP address; remote access is disabled") }
 
-	log.Printf("TBox Drive browser client: http://%s", address)
+	log.Printf("TBox Drive browser client (keep this launch URL private): %s", server.LaunchURL(address))
 	log.Printf("Local database: %s", filepath.Join(dataDir, "tbox.db"))
 	return server.ListenAndServe(ctx, address)
 }
