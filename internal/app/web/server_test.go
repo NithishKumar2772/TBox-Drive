@@ -10,6 +10,7 @@ import (
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/app"
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/transfer"
 	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
 	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
 )
