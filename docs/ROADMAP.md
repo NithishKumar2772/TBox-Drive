@@ -19,6 +19,10 @@
 - [x] Desktop account connection, file listing, single-file transfer UI
 - [x] Multi-file selection and sequential upload UI
 - [x] Current-folder search, pagination control and appearance selector
+- [x] Profile dropdown and application settings entry point
+- [x] Configurable automatic folder refresh
+- [x] GitHub latest-release checker and automatic startup check preference
+- [x] Upload throughput and estimated-time-remaining display
 - [ ] Real TeraBox account verification with an approved Open Platform app
 - [ ] Empty-file upload and bounded parallel uploads
 
@@ -28,6 +32,7 @@
 - [ ] Folder upload preserving nested structure
 - [ ] Explorer sorting, richer file properties and previews
 - [ ] Pause/resume/cancel controls and transfer queue recovery UX
+- [ ] Download progress events and unified real-time upload/download throughput + ETA
 - [x] Windows WinFsp virtual-drive prototype: remote listing, on-demand whole-file cache hydration, upload-on-flush/close, rename/move/delete
 - [ ] Production-ready Windows virtual drive: byte-range streaming, offline pinning, cache policy, reconnect and conflict-safe writes
 - [ ] macOS Finder/File Provider integration
@@ -42,9 +47,14 @@
 - [ ] Reconnect and background sync service
 
 ## M4 Security and media
-- [ ] Reviewed XChaCha20-Poly1305 file container and key lifecycle
+- [ ] Per-file encryption opt-in prompt on every upload
+- [ ] First-time file password, confirmation and optional password hint
+- [ ] Password prompt before encrypted file preview/open/download
+- [ ] Password change by re-wrapping file data keys
+- [ ] Recovery-key generation, export, restore and forgotten-password workflow
+- [ ] Reviewed Argon2id + XChaCha20-Poly1305 chunked file container and key lifecycle
 - [ ] Per-upload encryption choice and local decryption
-- [ ] Encrypted cache and recovery-key workflow
+- [ ] Encrypted cache, secure temporary-file cleanup and recovery-key workflow
 - [ ] Image/PDF/text/code preview and media gallery
 - [ ] Audio/video streaming, subtitles, playback position and MPV integration
 - [ ] ZIP/TAR/TAR.GZ import and optional extraction
@@ -63,4 +73,5 @@
 - [ ] Linux AppImage/DEB/RPM/Arch packaging
 - [ ] Android/iOS/TV store packaging
 - [ ] Accessibility, security, performance and upgrade testing
+- [ ] Cryptographic threat model, external review and recovery drills
 - [ ] Live-provider acceptance test suite
