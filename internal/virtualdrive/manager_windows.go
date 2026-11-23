@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -53,7 +54,9 @@ func (m *Manager) Mount(ctx context.Context, factory APIClientFactory, applicati
 		ctx: ctx, api: factory, root: strings.TrimRight(applicationRoot, "/"),
 		cacheDir: cacheDir,
 	}
-	mounted, err := winfsp.Mount(gofs.New(fs), mountpoint)
+	behavior, err := gofs.NewOptions(fs, gofs.WithCaseInsensitive(true), gofs.WithProvideFileID(true))
+	if err != nil { return m.status, fmt.Errorf("initialize WinFsp filesystem: %w", err) }
+	mounted, err := winfsp.Mount(behavior, mountpoint)
 	if err != nil {
 		return m.status, fmt.Errorf("mount %s failed; install the WinFsp runtime and try again: %w", mountpoint, err)
 	}
@@ -142,6 +145,7 @@ func (fs *cloudFileSystem) Remove(name string) error {
 	remote, err := fs.remotePath(name)
 	if err != nil { return err }
 	if remote == fs.root + "/" { return errors.New("the TeraBox application root cannot be deleted") }
+	item, err := fs.lookup(name); if err != nil { return err }; remote = item.Path
 	api, err := fs.apiClient()
 	if err != nil { return err }
 	return api.DeletePath(fs.ctx, remote)
@@ -150,6 +154,7 @@ func (fs *cloudFileSystem) Remove(name string) error {
 func (fs *cloudFileSystem) Rename(source, target string) error {
 	src, err := fs.remotePath(source)
 	if err != nil { return err }
+	item, lookupErr := fs.lookup(source); if lookupErr != nil { return lookupErr }; src = item.Path
 	dst, err := fs.remotePath(target)
 	if err != nil { return err }
 	if src == fs.root + "/" || dst == fs.root + "/" { return errors.New("the TeraBox application root cannot be renamed") }
@@ -166,6 +171,7 @@ func (fs *cloudFileSystem) OpenFile(name string, flag int, perm os.FileMode) (go
 	if err != nil { return nil, err }
 	item, lookupErr := fs.lookup(name)
 	exists := lookupErr == nil
+	if exists && item.Path != "" { remote = item.Path }
 	if lookupErr != nil && !errors.Is(lookupErr, os.ErrNotExist) { return nil, lookupErr }
 	writing := flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0
 	if exists && item.IsDirectory {
@@ -231,10 +237,11 @@ func (fs *cloudFileSystem) ensureCached(item provider.File) (string, error) {
 type cloudInfo struct { file provider.File }
 func (i cloudInfo) Name() string { return i.file.Name }
 func (i cloudInfo) Size() int64 { return i.file.Size }
-func (i cloudInfo) Mode() os.FileMode { if i.file.IsDirectory { return os.ModeDir|0555 }; return 0444|0200 }
+func (i cloudInfo) Mode() os.FileMode { if i.file.IsDirectory { return os.ModeDir|0755 }; return 0644 }
 func (i cloudInfo) ModTime() time.Time { if i.file.ModifiedAt.IsZero() { return time.Unix(0,0) }; return i.file.ModifiedAt }
 func (i cloudInfo) IsDir() bool { return i.file.IsDirectory }
 func (i cloudInfo) Sys() any { return nil }
+func (i cloudInfo) FileID() uint64 { id, _ := strconv.ParseUint(i.file.ID, 10, 64); return id }
 
 type cloudHandle struct {
 	file *os.File
