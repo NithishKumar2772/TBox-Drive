@@ -12,11 +12,13 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 	"strings"
 
 	"github.com/NithishKumar2772/TBox-Drive/internal/core/provider"
@@ -36,6 +38,9 @@ type UploadOptions struct {
 	OnProgress func(transferred,total int64)
 	Repository transfer.Repository
 	TransferID string
+	MaxPartAttempts int
+	RetryDelay time.Duration
+	MaxRetryDelay time.Duration
 }
 type precreateResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;UploadID string `json:"uploadid"`;ReturnType int `json:"return_type"`;BlockList []int `json:"block_list"`;Info apiFile `json:"info"` }
 type partResponse struct { Errno int `json:"errno"`;ShowMsg string `json:"show_msg"`;MD5 string `json:"md5"`;UploadID string `json:"uploadid"`;PartSeq int `json:"partseq"` }
@@ -100,7 +105,8 @@ func(c *APIClient)UploadFile(ctx context.Context,localPath,remotePath string,opt
 	if repo!=nil{if err=repo.UpdateProgress(ctx,taskID,transferred,transfer.StatusRunning,"");err!=nil{return provider.UploadResult{},err}}
 	if options.OnProgress!=nil{options.OnProgress(transferred,stat.Size())}
 	for _,index:=range missing{if err=ctx.Err();err!=nil{return provider.UploadResult{},err}
-		part:=chunks[index];got,partErr:=c.uploadPart(ctx,file,remotePath,pre.UploadID,part);if partErr!=nil{return provider.UploadResult{},fmt.Errorf("upload part %d: %w",index,partErr)}
+		part:=chunks[index];got,completedFile,partErr:=c.uploadPartWithRecovery(ctx,file,remotePath,pre.UploadID,part,blockMD5[index],string(blockJSON),len(chunks),options);if partErr!=nil{return provider.UploadResult{},fmt.Errorf("upload part %d: %w",index,partErr)}
+		if completedFile!=nil{result.File=*completedFile;transferred=stat.Size();if repo!=nil{for _,done:=range chunks{if err=repo.SavePart(ctx,transfer.Part{TransferID:taskID,Index:done.Index,Offset:done.Offset,Size:done.Size,Checksum:blockMD5[done.Index],Status:"completed"});err!=nil{return provider.UploadResult{},err}}};return result,nil}
 		if !strings.EqualFold(got,blockMD5[index]){return provider.UploadResult{},fmt.Errorf("TeraBox part %d checksum mismatch",index)}
 		transferred+=part.Size
 		if repo!=nil{
@@ -125,6 +131,50 @@ func ensureUploadSourceUnchanged(path string,file *os.File,initial os.FileInfo)e
 	if !os.SameFile(initial,pathInfo)||current.Size()!=initial.Size()||!current.ModTime().Equal(initial.ModTime())||pathInfo.Size()!=initial.Size()||!pathInfo.ModTime().Equal(initial.ModTime()){return errors.New("upload source changed during transfer; refusing to finalize")}
 	return nil
 }
+
+type partHTTPError struct { StatusCode int }
+func(e *partHTTPError)Error()string{return fmt.Sprintf("TeraBox part upload returned HTTP %d",e.StatusCode)}
+
+func retryablePartError(err error)bool{
+	var status *partHTTPError
+	if errors.As(err,&status){return status.StatusCode==http.StatusRequestTimeout||status.StatusCode==http.StatusTooManyRequests||status.StatusCode>=500}
+	var network net.Error
+	return errors.As(err,&network)||errors.Is(err,io.ErrUnexpectedEOF)
+}
+
+// uploadPartWithRecovery checks the authoritative precreate missing-part list
+// after an ambiguous transient failure. It retries only when TeraBox still
+// reports that exact shard as missing.
+func(c *APIClient)uploadPartWithRecovery(ctx context.Context,file *os.File,remotePath,uploadID string,part uploadPart,expectedMD5,blockJSON string,totalParts int,options UploadOptions)(string,*provider.File,error){
+	attempts:=options.MaxPartAttempts;if attempts==0{attempts=3};if attempts<1{return "",nil,errors.New("max part attempts must be positive")}
+	delay:=options.RetryDelay;if delay==0{delay=400*time.Millisecond};maxDelay:=options.MaxRetryDelay;if maxDelay==0{maxDelay=5*time.Second}
+	if delay<0||maxDelay<0||maxDelay<delay{return "",nil,errors.New("invalid part retry delay configuration")}
+	for attempt:=1;attempt<=attempts;attempt++{
+		got,err:=c.uploadPart(ctx,file,remotePath,uploadID,part)
+		if err==nil{return got,nil,nil}
+		if !retryablePartError(err)||attempt==attempts{return "",nil,err}
+		state,stateErr:=c.precreate(ctx,remotePath,blockJSON)
+		if stateErr!=nil{return "",nil,fmt.Errorf("part upload failed (%v) and TeraBox resume check failed: %w",err,stateErr)}
+		if state.ReturnType==2{
+			if state.Info.FSID==0{return "",nil,errors.New("TeraBox reported completed file without file ID")}
+			name:=state.Info.Name;if name==""{name=pathBase(state.Info.Path)}
+			done:=&provider.File{ID:strconv.FormatUint(state.Info.FSID,10),Name:name,Path:state.Info.Path,Size:int64(state.Info.Size),IsDirectory:state.Info.IsDir==1}
+			return "",done,nil
+		}
+		if state.UploadID!=uploadID{return "",nil,errors.New("TeraBox upload session changed during resume check")}
+		missing:=state.BlockList;if len(missing)==0{missing=[]int{0}}
+		missingSet:=make(map[int]struct{},len(missing))
+		for _,index:=range missing{if index<0||index>=totalParts{return "",nil,fmt.Errorf("TeraBox resume check returned invalid part index %d",index)};if _,exists:=missingSet[index];exists{return "",nil,fmt.Errorf("TeraBox resume check returned duplicate part index %d",index)};missingSet[index]=struct{}{}}
+		if _,stillMissing:=missingSet[part.Index];!stillMissing{return expectedMD5,nil,nil}
+		if attempt<attempts{
+			timer:=time.NewTimer(delay)
+			select{case<-ctx.Done():if !timer.Stop(){<-timer.C};return "",nil,ctx.Err();case<-timer.C:}
+			delay*=2;if delay>maxDelay{delay=maxDelay}
+		}
+	}
+	return "",nil,errors.New("TeraBox part upload attempts exhausted")
+}
+
 func(c *APIClient)precreate(ctx context.Context,remotePath,blockJSON string)(precreateResponse,error){
 	q:=url.Values{"access_tokens":{c.accessToken}};form:=url.Values{"path":{remotePath},"autoinit":{"1"},"block_list":{blockJSON}}
 	var result precreateResponse;if err:=c.postFormJSON(ctx,c.apiBase+"/openapi/api/precreate?"+q.Encode(),form,&result);err!=nil{return result,err};return result,nil
@@ -143,7 +193,7 @@ func(c *APIClient)uploadPart(ctx context.Context,file *os.File,remotePath,upload
 	req.Header.Set("Content-Type",writer.FormDataContentType());req.ContentLength=int64(len(prefix)+len(suffix))+part.Size
 	resp,err:=c.http.Do(req);if err!=nil{return "",fmt.Errorf("TeraBox part request failed: %w",err)};defer resp.Body.Close()
 	const max=1<<20;data,err:=io.ReadAll(io.LimitReader(resp.Body,max+1));if err!=nil{return "",err};if len(data)>max{return "",errors.New("TeraBox part response exceeded 1 MiB")}
-	if resp.StatusCode<200||resp.StatusCode>=300{return "",fmt.Errorf("TeraBox part upload returned HTTP %d",resp.StatusCode)}
+	if resp.StatusCode<200||resp.StatusCode>=300{return "",&partHTTPError{StatusCode:resp.StatusCode}}
 	var result partResponse;if err:=json.Unmarshal(data,&result);err!=nil{return "",fmt.Errorf("decode TeraBox part response: %w",err)}
 	if result.Errno!=0{return "",fmt.Errorf("TeraBox part upload error %d: %s",result.Errno,result.ShowMsg)}
 	if result.UploadID!=uploadID{return "",errors.New("TeraBox part response upload ID mismatch")};if result.PartSeq!=part.Index{return "",errors.New("TeraBox part response sequence mismatch")};if result.MD5==""{return "",errors.New("TeraBox part response omitted MD5")};return result.MD5,nil

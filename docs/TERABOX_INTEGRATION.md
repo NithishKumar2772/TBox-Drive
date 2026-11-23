@@ -27,3 +27,7 @@ If an upload is interrupted, rerun the same upload: precreate can report which p
 - End-to-end cloud tests require an approved TeraBox Open Platform application and a dedicated authorized account.
 
 Do not substitute reverse-engineered PCS/NDUS web endpoints and label them official. Store credentials in an OS credential vault or deployment secret store. Never put secrets in frontend code, SQLite plaintext, logs, examples or GitHub Actions output.
+
+
+## Ambiguous shard failures
+When a shard request fails with a transient network or retryable HTTP error, the client re-runs precreate with the exact same ordered MD5 block list and upload path. If TeraBox no longer lists that shard as missing, the client treats the shard as accepted and does not send it twice. If TeraBox still lists it as missing, the client retries that shard with bounded attempts and delay. Permanent errors are not retried. This reconciliation behaviour is covered by an HTTP test server; it still requires live-account verification.
