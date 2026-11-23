@@ -51,13 +51,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - working-directory: frontend
-        run: npm install
-      - working-directory: frontend
-        run: npm run build
-      - name: Build Windows desktop app
-        run: go build -tags desktop -o dist/TBoxDrive.exe ./cmd/tboxdrive-desktop
+      - name: Build Windows desktop and self-hosted web applications
+        run: ./scripts/build-windows.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: TBoxDrive-windows-amd64
-          path: dist/TBoxDrive.exe
+          path: |
+            dist/TBoxDrive.exe
+            dist/TBoxDrive-Web.exe

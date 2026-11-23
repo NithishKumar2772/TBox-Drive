@@ -1,0 +1,129 @@
+package web
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/NithishKumar2772/TBox-Drive/internal/app"
+	"github.com/NithishKumar2772/TBox-Drive/internal/core/account"
+	"github.com/NithishKumar2772/TBox-Drive/internal/providers/terabox"
+	"github.com/NithishKumar2772/TBox-Drive/internal/storage/sqlite"
+)
+
+type testSecrets struct{}
+func (testSecrets) Get(context.Context,string)([]byte,error){ return nil, nil }
+func (testSecrets) Set(context.Context,string,[]byte)error{return nil}
+func (testSecrets) Delete(context.Context,string)error{return nil}
+
+func testServer(t *testing.T) *Server {
+	t.Helper()
+	store,err:=sqlite.Open(":memory:")
+	if err!=nil{t.Fatal(err)}
+	t.Cleanup(func(){_ = store.Close()})
+	oauth,err:=terabox.NewOAuthClient(terabox.OAuthConfig{ClientID:"test",ClientSecret:"test",PrivateSecret:"test"})
+	if err!=nil{t.Fatal(err)}
+	service,err:=app.NewTeraBoxService(oauth,testSecrets{},store,store,"/Apps/TBox-Drive")
+	if err!=nil{t.Fatal(err)}
+	server,err:=NewServer(service,store,"/Apps/TBox-Drive")
+	if err!=nil{t.Fatal(err)}
+	return server
+}
+
+func TestLoopbackStatusIsAvailable(t *testing.T){
+	server:=testServer(t)
+	req:=httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/status",nil)
+	req.Host="127.0.0.1:8765"
+	req.AddCookie(&http.Cookie{Name:"tbox_local_session",Value:server.sessionToken})
+	response:=httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code!=http.StatusOK{t.Fatalf("status = %d, body=%s",response.Code,response.Body.String())}
+	if response.Header().Get("X-Content-Type-Options")!="nosniff"{t.Fatal("security headers were not applied")}
+	if response.Header().Get("Content-Security-Policy")==""{t.Fatal("content security policy was not applied")}
+	if response.Header().Get("Cache-Control")!="no-store"{t.Fatal("API response should not be cached")}
+}
+
+func TestRejectsNonLoopbackHost(t *testing.T){
+	server:=testServer(t)
+	req:=httptest.NewRequest(http.MethodGet,"http://attacker.example/api/status",nil)
+	req.Host="attacker.example"
+	response:=httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code!=http.StatusForbidden{t.Fatalf("status = %d, want 403",response.Code)}
+}
+
+func TestRejectsMutationWithoutSameOrigin(t *testing.T){
+	server:=testServer(t)
+	tests:=[]struct{name,host,origin,fetchSite string}{
+		{name:"missing origin",host:"127.0.0.1:8765"},
+		{name:"foreign origin",host:"127.0.0.1:8765",origin:"https://attacker.example"},
+		{name:"cross-site fetch",host:"127.0.0.1:8765",origin:"http://127.0.0.1:8765",fetchSite:"cross-site"},
+	}
+	for _,test:=range tests{t.Run(test.name,func(t *testing.T){
+		req:=httptest.NewRequest(http.MethodPost,"http://127.0.0.1:8765/api/connect/start",nil)
+		req.Host=test.host
+		if test.origin!=""{req.Header.Set("Origin",test.origin)}
+		if test.fetchSite!=""{req.Header.Set("Sec-Fetch-Site",test.fetchSite)}
+		response:=httptest.NewRecorder()
+		server.Handler().ServeHTTP(response,req)
+		if response.Code!=http.StatusForbidden{t.Fatalf("status = %d, want 403",response.Code)}
+	})}
+}
+
+func TestCloudPathMustStayInsideApplicationFolder(t *testing.T){
+	server:=testServer(t)
+	for _,value:=range []string{"/Apps/TBox-Drive","/Apps/TBox-Drive/docs/file.pdf"}{
+		if err:=server.validateCloudPath(value);err!=nil{t.Errorf("valid path %q rejected: %v",value,err)}
+	}
+	for _,value:=range []string{"/Apps/Other/file.pdf","/Apps/TBox-Drive/../../Other/file.pdf","/Apps/TBox-Drive\\secret"}{
+		if err:=server.validateCloudPath(value);err==nil{t.Errorf("unsafe path %q accepted",value)}
+	}
+}
+
+func TestListenAndServeRejectsPublicBindAddress(t *testing.T){
+	server:=testServer(t)
+	if err:=server.ListenAndServe(context.Background(),"0.0.0.0:8765");err==nil{t.Fatal("expected public bind address to be rejected")}
+}
+
+func TestAccountsEndpointDoesNotExposeCredentialReference(t *testing.T) {
+	server := testServer(t)
+	item := account.Account{ID:"terabox:123",ProviderID:"terabox",DisplayName:"Personal account",CredentialRef:"vault-secret-reference"}
+	if err := server.store.Save(context.Background(),item); err != nil { t.Fatal(err) }
+	req := httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/accounts",nil)
+	req.Host = "127.0.0.1:8765"
+	req.AddCookie(&http.Cookie{Name:"tbox_local_session",Value:server.sessionToken})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusOK { t.Fatalf("status = %d, body=%s",response.Code,response.Body.String()) }
+	body := response.Body.String()
+	if strings.Contains(body,"credentialRef") || strings.Contains(body,"vault-secret-reference") {
+		t.Fatalf("account response exposed credential metadata: %s",body)
+	}
+	if !strings.Contains(body,"Personal account") { t.Fatalf("account metadata missing: %s",body) }
+}
+
+func TestAPIRequiresLocalBrowserSession(t *testing.T) {
+	server := testServer(t)
+	req := httptest.NewRequest(http.MethodGet,"http://127.0.0.1:8765/api/status",nil)
+	req.Host = "127.0.0.1:8765"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusUnauthorized { t.Fatalf("status = %d, want 401",response.Code) }
+}
+
+func TestLaunchTokenExchangesForHttpOnlySessionCookie(t *testing.T) {
+	server := testServer(t)
+	req := httptest.NewRequest(http.MethodPost,"http://127.0.0.1:8765/api/session",nil)
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin","http://127.0.0.1:8765")
+	req.Header.Set("X-TBox-Session",server.sessionToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response,req)
+	if response.Code != http.StatusNoContent { t.Fatalf("status = %d, body=%s",response.Code,response.Body.String()) }
+	cookie := response.Result().Cookies()
+	if len(cookie)!=1 || cookie[0].Name!="tbox_local_session" || !cookie[0].HttpOnly || cookie[0].SameSite!=http.SameSiteStrictMode {
+		t.Fatalf("unexpected session cookie: %#v",cookie)
+	}
+}

@@ -71,7 +71,11 @@
 - [ ] ZIP/TAR/TAR.GZ import and optional extraction
 
 ## M5 Web, mobile and TV clients
-- [ ] Browser-based web application (React) using a secure shared Go HTTP API; OAuth device authorization, file browsing, upload/download, previews and transfer history
+- [x] Self-hosted browser/API foundation: loopback-only Go server, same-origin mutation checks, credential isolation, file browsing, quota, upload/download, rename/delete and transfer history (initial implementation; security and live-account validation remain)
+- [ ] Complete browser client: pagination, previews, folder upload, transfer progress and pause/resume/cancel
+- [ ] Production security review and approved-account acceptance testing for self-hosted web mode
+- [ ] Remote/LAN device access only after separate authenticated device-session and TLS design review
+- [ ] Browser-based web application (React) feature completion using the shared Go HTTP API
 - [ ] Secure account/device session registry and device authorization/revocation flows
 - [ ] Multi-device session management UI: platform, device label, last active, current-session marker, revoke one/all sessions
 - [ ] Cross-device settings and sync coordination; encrypted-key sharing must be separately designed and reviewed
@@ -81,6 +85,12 @@
 - [ ] Samsung Tizen TV client
 - [ ] LG webOS TV client
 - [ ] Shared 24-locale language framework and system-language detection
+
+## Platform delivery order
+1. Windows desktop + self-hosted Web (current priority)
+2. macOS desktop and Finder integration
+3. TV clients: Android TV / Google TV / Fire TV, Samsung Tizen and LG webOS
+4. Mobile clients: Android and iOS
 
 ## M6 Release engineering
 - [ ] Windows x64/ARM64 packaging
