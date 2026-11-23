@@ -82,6 +82,10 @@ func(s *TeraBoxService)ConnectedProvider(ctx context.Context,accountID string)(*
 	api,err:=s.NewAPIClient(ctx,accountID);if err!=nil{return nil,err};return terabox.NewConnectedWithRepository(api,s.transfers),nil
 }
 func(s *TeraBoxService)Disconnect(ctx context.Context,accountID string)error{
+	// Serialize disconnect with refresh so a concurrent refresh cannot write
+	// credentials back after the account has been removed.
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
 	item,err:=s.accounts.Get(ctx,accountID);if err!=nil{return err}
 	// Remove the account record first. A database failure must not destroy
 	// the only reference to credentials that are still stored in the vault.
